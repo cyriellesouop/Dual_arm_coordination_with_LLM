@@ -1,0 +1,31 @@
+# config/debug_overlay_config.yaml — debug_overlay_node parameters
+#
+# Live multi-camera debug viewer: tiles YOLO detections, live per-camera
+# ArUco marker detection, and the workspace boundary into one OpenCV window.
+# Run with:
+#   ros2 launch overhead_perception debug_overlay.launch.py
+
+debug_overlay_node:
+  ros__parameters:
+
+    # Comma-separated stream IDs to tile.
+    stream_ids: "0,1,2,3"
+
+    # Stream ID used by aruco_localizer_node to drive the production ArUco
+    # frame/table bounds. Its tile is visually marked "REFERENCE".
+    ref_stream_id: 1
+
+    # ArUco dictionary name (must match the printed markers).
+    aruco_dict: "DICT_4X4_50"
+
+    # Comma-separated IDs of all ArUco markers expected in the scene.
+    # Missing ones are flagged in red on the affected camera's tile.
+    marker_ids: "0,1,2,3"
+
+    # Rate to re-run ArUco detection per camera (Hz), independent of the
+    # 30Hz display refresh.
+    aruco_detect_rate: 8.0
+
+    # Per-camera tile size in the display grid (pixels).
+    tile_width: 640
+    tile_height: 360

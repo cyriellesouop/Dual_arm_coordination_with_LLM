@@ -1,0 +1,13 @@
+# config/intrinsic_aruco_calibration_config.yaml
+# Must match the 'name' field in the Node() action of intrinsic_aruco_calibration.launch.py
+
+intrinsic_aruco_calibration_node:
+  ros__parameters:
+    stream_id: 1
+    squares_x: 12             # number of squares horizontally
+    squares_y: 9              # number of squares vertically
+    square_length: 0.1      
+    marker_length: 0.075    
+    aruco_dict: 'DICT_4X4_100'
+    min_samples: 25
+    min_corner_displacement: 20.0

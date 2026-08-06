@@ -1,0 +1,10 @@
+# config/intrinsic_calibration_config.yaml
+# Must match the 'name' field in the Node() action of intrinsic_calibration.launch.py
+
+intrinsic_checkerboard_calibration_node:
+  ros__parameters:
+    stream_id: 1
+    pattern_cols: 6         # inner corners horizontally (not number of squares)
+    pattern_rows: 8         # inner corners vertically
+    square_size: 0.029      # meters (29 mm squares)
+    min_samples: 20         # minimum accepted samples before 'c' triggers calibration

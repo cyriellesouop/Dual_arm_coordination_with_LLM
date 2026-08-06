@@ -1,0 +1,20 @@
+# config/object_localizer_config.yaml — object_localizer_node parameters
+
+object_localizer_node:
+  ros__parameters:
+
+    # Absolute path to camera_calibration_nodes.yaml produced by camera_calibration_pkg.
+    calibration_file: '/auro-final-project/calibration/camera_calibration_nodes.yaml'
+
+    # Comma-separated stream IDs to use for triangulation. All listed IDs must
+    # appear in the calibration file. Add more IDs as cameras are calibrated.
+    stream_ids: '0,1,2,3'
+
+    # Minimum number of cameras that must see a detection for it to be localised.
+    min_cameras: 2
+
+    # Triangulation publish rate (Hz).
+    publish_rate: 5.0
+
+    # Topic on which world-frame object positions are published.
+    output_topic: '/perception/objects/cam1'

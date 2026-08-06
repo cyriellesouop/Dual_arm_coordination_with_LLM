@@ -1,0 +1,96 @@
+FROM osrf/ros:humble-desktop
+
+ARG DEBIAN_FRONTEND=noninteractive
+
+# System dependencies: build tools + MoveIt2 stack + vision + audio + utilities
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    python3-colcon-common-extensions \
+    python3-vcstool \
+    python3-rosdep \
+    git \
+    wget \
+    tmux \
+    curl \
+    sshpass \
+    openssh-client \
+    ros-humble-vision-msgs \
+    ros-humble-moveit \
+    ros-humble-moveit-msgs \
+    ros-humble-control-msgs \
+    ros-humble-controller-manager \
+    ros-humble-joint-trajectory-controller \
+    ros-humble-joint-state-broadcaster \
+    ros-humble-gripper-controllers \
+    ros-humble-joint-state-publisher \
+    ros-humble-joint-state-publisher-gui \
+    ros-humble-xacro \
+    ros-humble-robot-state-publisher \
+    ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-cv-bridge \
+    ros-humble-ros2-control \
+    ros-humble-ros2-controllers \
+    ros-humble-domain-bridge \
+    espeak-ng \
+    alsa-utils \
+    libasound2-plugins \
+    portaudio19-dev \
+    pulseaudio-utils \
+    ffmpeg \
+    libavformat-dev \
+    libavcodec-dev \
+    libavdevice-dev \
+    libavutil-dev \
+    libavfilter-dev \
+    libswscale-dev \
+    libswresample-dev \
+    pkg-config \
+    gstreamer1.0-plugins-base \
+    gstreamer1.0-plugins-good \
+    gstreamer1.0-plugins-bad \
+    gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    gstreamer1.0-tools \
+    libgstreamer1.0-dev \
+    libgstreamer-plugins-base1.0-dev \
+ && rm -rf /var/lib/apt/lists/*
+
+# opencv-python: PyPI wheel is used because the apt python3-opencv on osrf/ros:humble-desktop
+# is built without FFMPEG support. Pin <4.9 and numpy<2 because ros-humble-cv-bridge is a
+# pre-compiled C extension built against the NumPy 1.x ABI — it breaks silently with NumPy 2.x.
+RUN pip install "opencv-python<4.9" "numpy<2" --quiet
+
+# Clone source packages not available in apt:
+#   - ros2_kortex: Kinova driver, bringup, description, MoveIt configs
+#   - pymoveit2: Python MoveIt2 interface used by kinova_pick_planner
+#   - picknik_controllers: provides picknik_reset_fault_controller + picknik_twist_controller
+#     required by kinova_gen3_lite_moveit_config
+# NOTE: ros2_robotiq_gripper is intentionally excluded — the Gen3 Lite uses its own
+#       built-in gen3_lite_2f gripper, not a Robotiq gripper. robotiq_description is
+#       an exec_depend of kortex_bringup but is not required at runtime for Gen3 Lite.
+RUN mkdir -p /kortex_ws/src && \
+    cd /kortex_ws/src && \
+    git clone https://github.com/Kinovarobotics/ros2_kortex.git -b humble && \
+    git clone https://github.com/AndrejOrsula/pymoveit2.git && \
+    git clone https://github.com/picknikrobotics/picknik_controllers.git -b humble
+
+# Build the full workspace (kortex stack + pymoveit2 + picknik_controllers + robotiq)
+# kortex_api uses FetchContent to download the Kinova binary API at build time
+RUN cd /kortex_ws && \
+    /bin/bash -c "source /opt/ros/humble/setup.bash && \
+        apt-get update && \
+        rosdep update && \
+        rosdep install --from-paths src --ignore-src -r -y \
+            --skip-keys 'ament_clang_format ament_clang_tidy gazebo_ros2_control parallel_gripper_controller robotiq_description' && \
+        colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
+        rm -rf /var/lib/apt/lists/*"
+
+# Python: vision/detection + llm + audio
+# numpy<2 is pinned again here because ultralytics/torch would otherwise upgrade it,
+# breaking the ros-humble-cv-bridge binary which was compiled against the NumPy 1.x ABI.
+RUN pip install torch ultralytics ollama faster-whisper pyttsx3 sounddevice scipy edge-tts "numpy<2" --quiet
+
+# Source ROS, workspace, and set CycloneDDS as RMW (required for MoveIt + kortex)
+RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
+    echo "source /kortex_ws/install/setup.bash" >> /root/.bashrc && \
+    echo "export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp" >> /root/.bashrc

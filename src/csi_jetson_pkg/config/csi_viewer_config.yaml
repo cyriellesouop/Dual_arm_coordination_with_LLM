@@ -1,0 +1,7 @@
+# config/csi_viewer_config.yaml
+
+csi_subscriber:
+  ros__parameters:
+    stream_ids: [0, 1, 2, 3]
+    tile_width:  1280
+    tile_height: 720

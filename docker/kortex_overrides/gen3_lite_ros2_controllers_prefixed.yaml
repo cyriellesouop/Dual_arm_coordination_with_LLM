@@ -1,0 +1,81 @@
+# PARKED — not currently used by any launch file or Dockerfile.server build step.
+#
+# Written while evaluating a shared-URDF / prefix-based dual-arm bringup approach
+# (one shared TF tree + planning scene, arms distinguished by a `${prefix}` on every
+# joint/link name). That approach was shelved in favor of two independent single-arm
+# stacks on separate ROS_DOMAIN_IDs, coordinated via bridged status/command topics —
+# see README section "Dual-arm bringup approach" for why.
+#
+# Kept here in case a future pass wants real-time shared collision avoidance (a live
+# MoveIt2 planning scene both arms register into) rather than the static-keepout-box +
+# FSM-mutual-exclusion safety model the current approach uses.
+#
+# Derived from: /kortex_ws/src/ros2_kortex/kortex_description/arms/gen3_lite/6dof/config/ros2_controllers.yaml
+# (vendor original, untouched — this is a separate file, not an edit of it).
+# Diff from that original: `${prefix}` added to joint names in `joint_trajectory_controller.joints`
+# and `gen3_lite_2f_gripper_controller.joint`. `twist_controller.joint: tcp` deliberately left
+# unprefixed — verified against kortex.ros2_control.xacro that no "tcp" joint/link exists in the
+# gen3_lite description at all (prefixed or not), and this controller is spawned --inactive and
+# unused by kinova_pick_planner.py, so it was left matching the vendor original.
+#
+# To activate: pass `controllers_file:=gen3_lite_ros2_controllers_prefixed.yaml` when calling
+# kortex_control.launch.py directly (bypassing gen3_dual.launch.py, which hardcodes
+# description_file:=gen3.xacro and is not Gen3-Lite-compatible), and add a Dockerfile.server
+# COPY step to install this file into the vendor config directory at image build time.
+
+controller_manager:
+  ros__parameters:
+    update_rate: 1000  # Hz
+
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+    twist_controller:
+      type: picknik_twist_controller/PicknikTwistController
+
+    fault_controller:
+      type: picknik_reset_fault_controller/PicknikResetFaultController
+
+    gen3_lite_2f_gripper_controller:
+      type: position_controllers/GripperActionController
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - ${prefix}joint_1
+      - ${prefix}joint_2
+      - ${prefix}joint_3
+      - ${prefix}joint_4
+      - ${prefix}joint_5
+      - ${prefix}joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+twist_controller:
+  ros__parameters:
+    joint: tcp
+    interface_names:
+      - twist.linear.x
+      - twist.linear.y
+      - twist.linear.z
+      - twist.angular.x
+      - twist.angular.y
+      - twist.angular.z
+
+gen3_lite_2f_gripper_controller:
+  ros__parameters:
+    default: true
+    joint: ${prefix}right_finger_bottom_joint
+    allow_stalling: true

@@ -1,0 +1,16 @@
+# config/camera_bridge_config.yaml — camera_bridge_node parameters
+
+camera_bridge_node:
+  ros__parameters:
+
+    # Comma-separated stream IDs to bridge.
+    stream_ids: "0,1,2,3"
+
+    # Topic prefix for incoming compressed streams.
+    # Full topic: {input_prefix}{id}/compressed_jpeg
+    # Default matches csi_publisher_node output: /stream_0/compressed_jpeg
+    input_prefix: '/stream_'
+
+    # Topic prefix for outgoing raw streams.
+    # Full topic: {output_prefix}{id}/raw
+    output_prefix: '/video/stream_'

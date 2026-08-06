@@ -1,0 +1,10 @@
+# csi_jetson_pkg/config/csi_params.yaml
+
+csi_publisher: # must match the 'name' in the Node() action of the launch file
+  ros__parameters:
+    camera_id: 0
+    stream_id: 0
+    width: 1280
+    height: 720
+    fps: 30
+    jpeg_quality: 95

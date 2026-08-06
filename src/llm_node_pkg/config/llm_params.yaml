@@ -1,0 +1,31 @@
+llm_node:
+  ros__parameters:
+    # Ollama model to use for conversation.
+    # Options: llama3.2:3b (recommended, fast on CPU), llama3 (larger, slower)
+    # Must be pulled first: ollama pull llama3.2:3b
+    ollama_model: "llama3.2:3b"
+
+    # Whisper model size for speech-to-text.
+    # tiny is fastest, medium is most accurate (base is a good middle ground)
+    whisper_model: "base"
+
+    # pyttsx3 speech rate (words per minute). 150-200 is natural.
+    tts_rate: 175
+
+    # Set to false to use keyboard input instead of microphone.
+    # Useful for testing without audio hardware.
+    use_voice: true
+
+    # Seconds of silence after speech before stopping the recording.
+    silence_duration: 0.8
+
+    # Speech threshold = ambient_rms * noise_multiplier.
+    # Increase this if background noise (e.g. server fan) triggers false detection.
+    # 2.5 is a good starting point; try 3.0-4.0 in a loud environment.
+    noise_multiplier: 2.5
+
+    # Ollama server URL.
+    # Default works on Windows and on WSL with mirrored networking (recommended).
+    # If localhost doesn't work from WSL, replace with the Windows host IP:
+    #   cat /etc/resolv.conf | grep nameserver   <-- shows the IP to use
+    ollama_host: "http://localhost:11434"

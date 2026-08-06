@@ -1,0 +1,80 @@
+# controller_params.yaml: AURO Controller Node Parameters
+#
+# Load with:
+#   ros2 launch auro_controller controller.launch.py
+#
+# Quick-start checklist:
+#
+# Step 1: Software only (no arm, mock perception):
+#   1. Leave all values at defaults below.
+#   2. ros2 launch auro_controller controller.launch.py
+#   3. ros2 run auro_controller mock_perception_pub   (separate terminal)
+#   4. ros2 topic echo /detected_objects             (verify output)
+#
+# Step 2: Real perception, no arm:
+#   1. Start overhead_perception_pkg nodes (they publish the required topics).
+#   2. ros2 launch auro_controller controller.launch.py
+#   3. Adjust table_z_min/max and table_bounds_padding if needed.
+#
+# Step 3: Full system with arm:
+#   1. Start MoveIt2 + Kinova driver.
+#   2. Set enable_arm: true.
+#   3. Tune place_x / place_y / place_z for the real drop-off spot.
+
+controller_node:
+  ros__parameters:
+
+    #
+    # ARM INTEGRATION
+    #
+    # Set to true ONLY after MoveIt2 + Kinova kortex_driver are running.
+    enable_arm: true
+
+    #
+    # TABLE BOUNDS
+    #
+    # XY bounds are derived automatically from /perception/aruco/landmarks
+    # (the 4 ArUco corner markers define the table extent).
+    #
+    # Z bounds are checked against these fixed limits (metres).
+    # table_z_min is slightly below the table surface to catch objects
+    # resting directly on it; table_z_max is the tallest expected object.
+    table_z_min:  -0.05
+    table_z_max:   0.60
+
+    # Extra margin added to each edge of the ArUco-corner bounding box (metres).
+    # Increase if valid objects near the table edge are being dropped.
+    table_bounds_padding: 0.05
+
+    
+    #
+    # ARUCO-TO-ARM TRANSFORM
+    #
+    # offset_yaw = -pi/2: arm +x parallel to aruco_0 +y, arm +y anti-parallel to aruco_0 +x.
+    # offset_y = distance (m) from aruco_0 origin to arm base along aruco_0 +x. Tune this.
+    use_tf:      false
+#    offset_x:    0.0
+    offset_x:    -0.085
+#    offset_y:    0.365
+    offset_y: 0.38
+#    offset_y: 0.0
+#    offset_y:    0.315
+    offset_z:    0.0
+    offset_yaw: -1.5708   # -pi/2 rad
+
+    #
+    # PLACE LOCATION
+    #
+    # Where the arm drops the picked object, in arm base_link frame (metres).
+    # Measure: position of the drop-off bin relative to the arm base.
+    # TODO: Measure the real drop-off location.
+    place_x:  0.15
+    place_y:  0.26
+    #place_z: -0.05
+    place_z: -0.02
+
+    #
+    # DEBOUNCE
+    #
+    # Minimum seconds between identical scene republications to /detected_objects.
+    debounce_min_sec: 1.0

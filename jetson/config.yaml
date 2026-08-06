@@ -1,0 +1,14 @@
+# jetson/config.yaml
+# Default camera parameters for rtsp_server.py.
+# Override any value via CLI flags or env vars in run_rtsp_server.sh.
+#
+# One instance of rtsp_server.py runs per Jetson/camera.
+# Resulting URL:  rtsp://<this_jetson_ip>:<port>/stream<sensor_id>
+
+rtsp_server:
+  sensor_id: 0       # nvarguscamerasrc sensor-id (CSI port on this Jetson)
+  width:     1280
+  height:    720
+  fps:       30
+  bitrate:   4000000 # bits/sec — 4 Mbps at 720p is well within Gigabit LAN
+  port:      8554    # standard RTSP port

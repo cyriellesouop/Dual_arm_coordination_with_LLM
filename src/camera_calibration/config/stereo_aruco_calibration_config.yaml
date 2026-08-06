@@ -1,0 +1,20 @@
+# config/stereo_aruco_calibration_config.yaml
+# Must match the 'name' field in the Node() action of stereo_aruco_calibration.launch.py
+#
+# Set intrinsic_yaml_left / intrinsic_yaml_right to the absolute paths of the
+# YAML files produced by intrinsic_aruco_calibration_node for each stream.
+
+stereo_aruco_calibration_node:
+  ros__parameters:
+    stream_id_left:  1
+    stream_id_right: 0
+    intrinsic_yaml_left:  '/auro-final-project/calibration/intrinsics_aruco_stream1_720p.yaml'
+    intrinsic_yaml_right: '/auro-final-project/calibration/intrinsics_aruco_stream0_720p.yaml'
+    squares_x: 12            # columns (horizontal)
+    squares_y: 9             # rows (vertical)
+    square_length: 0.1       # meters
+    marker_length: 0.075     # meters
+    aruco_dict: 'DICT_4X4_100'
+    min_samples: 25
+    min_corner_displacement: 20.0
+    max_sync_delta_ms: 50.0  # reject pairs where frames differ by more than this

@@ -1,0 +1,41 @@
+# config/detector.yaml — detector_node parameters
+#
+# model_path: path to YOLO weights. On first run "yolo11m.pt" auto-downloads.
+#             Point at an absolute path to use a local file.
+#
+# class_filter: subset of COCO class names to report. Remove entries to
+#               drop categories you don't need.
+
+detector_node:
+  ros__parameters:
+
+    # Comma-separated stream IDs to subscribe to.
+    stream_ids: "0,1,2,3"
+
+    # YOLO model weights. "yolo11m.pt" downloads automatically on first run.
+    model_path: "yolo11m.pt"
+
+    # Minimum confidence to report a detection (0.0 – 1.0).
+    confidence_threshold: 0.5
+
+    # Maximum inference rate per camera (Hz). Caps CPU/GPU load.
+    max_fps: 5.0
+
+    # Compute device: "auto" picks CUDA if available, else CPU.
+    # Override with "cuda" or "cpu".
+    device: "auto"
+
+    # COCO class names to keep. All other classes are ignored.
+    class_filter:
+      - apple
+      - orange
+      - banana
+      - bottle
+      - cup
+      - mouse
+      - keyboard
+      - laptop
+      - cell phone
+      - remote
+      - book
+      - scissors

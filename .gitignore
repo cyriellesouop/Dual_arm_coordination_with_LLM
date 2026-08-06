@@ -1,0 +1,36 @@
+# ros builds
+build/
+install/
+log/
+.colcon_install_layout
+
+# python 
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+.eggs/
+*.egg
+.venv/
+venv/
+
+# vscode 
+.vscode/
+
+# os
+*.swp
+
+# environment/secrets
+*.pem
+*.key
+
+# local DDS config (network-specific)
+fastdds_peers.xml
+
+# models
+*.pt
+
+# dependencies
+src/ros2_kortex
+
+cyclonedds_local.xml

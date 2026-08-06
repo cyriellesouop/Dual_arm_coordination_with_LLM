@@ -1,0 +1,41 @@
+# config/aruco_localizer_config.yaml — aruco_localizer_node parameters
+
+aruco_localizer_node:
+  ros__parameters:
+
+    # Absolute path to camera_calibration_nodes.yaml (same file as localizer).
+    calibration_file: '/auro-final-project/calibration/camera_calibration_nodes.yaml'
+
+    # Stream ID of the camera used for ArUco detection via solvePnP.
+    # Must be present in the calibration file.
+    ref_stream_id: 1
+
+    # ArUco dictionary name (must match the printed markers).
+    aruco_dict: 'DICT_4X4_50'
+
+    # Physical side length of the black square on the marker (metres).
+    marker_size: 0.097
+
+    # Comma-separated IDs of all ArUco markers in the scene.
+    # id=origin_id defines the output coordinate frame; others become landmarks.
+    marker_ids: '0,1,2,3'
+
+    # Marker ID whose pose defines the aruco coordinate frame origin.
+    origin_id: 0
+
+    # How often to re-detect markers and update their world-frame poses (Hz).
+    update_rate: 1.0
+
+    # Topic to subscribe to for world-frame object positions.
+    # Must match output_topic in object_localizer_config.yaml.
+    world_topic: '/perception/objects/cam1'
+
+    # Topic on which ArUco-frame object positions are published.
+    # Defaults to /overhead/objects/aruco-id-{origin_id} if left empty.
+    aruco_topic: '/perception/objects/aruco_id_0'
+
+    # Seconds since a marker was last detected before it's treated as stale.
+    # The origin marker going stale pauses /perception/objects/aruco_id_0;
+    # a stale landmark marker is dropped from /perception/aruco/landmarks.
+    # Default is ~3x the default update_rate (3 missed ticks).
+    stale_timeout_sec: 3.0

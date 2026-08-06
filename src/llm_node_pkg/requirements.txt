@@ -1,0 +1,21 @@
+# llm_node_pkg Python dependencies
+# Install with: pip install -r requirements.txt
+#
+# These are required on the desktop only.
+# The Jetson nodes (csi_jetson_pkg, detect_obj_jetson_pkg) do not need these.
+
+# LLM backend — Ollama Python client
+ollama
+
+# Speech-to-text — faster-whisper is ~4x faster than openai-whisper on CPU
+faster-whisper
+
+# Text-to-speech
+# Linux/WSL: edge-tts is used (neural voice via Microsoft Edge TTS service)
+# Windows: pyttsx3 is used (SAPI/OneCore voices)
+edge-tts
+pyttsx3
+
+# Audio capture
+sounddevice
+scipy

@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>auro_controller</name>
+  <version>0.1.0</version>
+  <description>
+    Perception-to-LLM-to-Arm controller bridge for the AURO robotic pick-and-place system.
+    Receives raw object detections from overhead_perception, validates coordinates against
+    table bounds, transforms to the ground frame, and forwards valid objects to the LLM node.
+    After the user selects an object via the LLM, triggers the Kinova arm pick-place sequence.
+  </description>
+  <maintainer email="csshan3@gmail.com">AURO Team</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>visualization_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>kinova_pick_planner</depend>
+  <exec_depend>overhead_perception</exec_depend>
+  <exec_depend>llm_node_pkg</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

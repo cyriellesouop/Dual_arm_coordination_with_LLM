@@ -1,0 +1,13 @@
+rtsp_viewer:
+  ros__parameters:
+
+    # Stream IDs to display — must match stream_ids in camera_bridge_config.yaml.
+    stream_ids: [0, 1, 2, 3]
+
+    # Topic prefix for incoming raw Image streams.
+    # Full topic: {input_prefix}{id}/raw
+    input_prefix: '/rtsp/stream_'
+
+    # Size of each stream tile in the tiled display window.
+    tile_width:  640
+    tile_height: 360

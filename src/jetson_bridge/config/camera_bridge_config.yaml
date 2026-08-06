@@ -1,0 +1,27 @@
+# config/camera_bridge_config.yaml — camera_bridge_node parameters
+#
+# The bridge node opens one RTSP stream per entry in stream_ids, decodes it
+# and publishes sensor_msgs/Image on:
+#   {output_prefix}{id}/raw
+#
+# rtsp_urls must have the same number of comma-separated entries as stream_ids,
+# in the same order.  Update IPs to match your Jetson LAN addresses.
+
+camera_bridge_node:
+  ros__parameters:
+
+    # Stream IDs — one per Jetson camera.
+    stream_ids: "0,1,2,3"
+
+    # RTSP URL for each stream (order must match stream_ids).
+    # Format: rtsp://<jetson_ip>:8554/stream<sensor_id>
+    rtsp_urls: "rtsp://192.168.2.22:8554/stream0,rtsp://192.168.2.23:8554/stream0,rtsp://192.168.2.27:8554/stream0,rtsp://192.168.2.28:8554/stream0"
+
+    # Topic prefix for outgoing raw Image streams.
+    # Full topic: {output_prefix}{id}/raw
+    output_prefix: '/rtsp/stream_'
+
+    # rtspsrc jitter buffer in milliseconds.
+    # 0 = no buffer (lowest latency, may tear on lossy links).
+    # 50-100 ms is safe for a dedicated Gigabit LAN.
+    rtspsrc_latency: 50
