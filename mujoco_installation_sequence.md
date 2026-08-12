@@ -1,9 +1,10 @@
 # MuJoCo Installation + Validation Sequence
 
 Status as of this writing: **MuJoCo physics engine and `mujoco_ros_pkgs` (the ROS2/`ros2_control`
-bridge) installed and built successfully inside `auro-laptop`, and fully validated end-to-end with
-the package's own multi-controller pendulum example.** Our own Gen3 Lite robot has not been pointed
-at MuJoCo yet — that's the next step, not covered here.
+bridge) installed, built, and fully validated end-to-end — first with the package's own pendulum
+example, then with our actual Gen3 Lite robot, which now renders and runs correctly in MuJoCo's
+native viewer.** Part 1 (below) covers the engine/package install and the pendulum validation. Part
+2 covers getting our own robot loading and rendering.
 
 ## Context / why
 
@@ -65,7 +66,7 @@ The missing GLFW means the interactive viewer isn't available yet (confirmed lat
 found. GUI will not be available.` — benign, doesn't block the physics engine or `ros2_control`
 integration). Fixable later with `apt-get install libglfw3-dev` if the GUI viewer is wanted.
 
-## Step-by-step sequence
+## Part 1: Engine + package install, validated with the pendulum example
 
 ### 1. Install MuJoCo itself — inside the container, not the host
 
@@ -249,6 +250,223 @@ DDS implementation choice), not itself the fix.
 `velocity_controller`) loaded → configured → activated, in sequence, with no errors. All 5 spawner
 processes exited cleanly.
 
+## Part 2: Getting our own Gen3 Lite arm loading and rendering
+
+### 11. Checked our URDF's `<ros2_control>` block — two things missing
+
+Inspected `kortex_description/arms/gen3_lite/6dof/urdf/kortex.ros2_control.xacro` (the vendor file
+that defines the arm's `ros2_control` hardware/joint interfaces, used for the real driver and fake
+hardware all session). Two gaps, both expected from the pendulum-test C++ source review:
+- No `kp`/`kv` anywhere — every joint only declares a `position` command interface, no fallback gain.
+  `MujocoRosSystem::initSim()` requires a positive `kp` for any position-controlled joint without a
+  matching named MuJoCo actuator (`{joint}_act_pos`), which is our case (no actuators authored).
+- No `sim_mujoco` branch in the `<hardware>` plugin selection — it already conditionally branches on
+  `sim_gazebo`/`sim_ignition`/`sim_isaac`/`use_fake_hardware`/real-hardware, but nothing for MuJoCo.
+
+### 12. Mapped the full vendor xacro chain needing the same treatment
+
+`kortex_ros2_control` (the macro with the actual plugin/joint definitions) is included and its
+params forwarded through **three** more vendor files, each with their own `sim_gazebo`/`sim_ignition`/
+`sim_isaac` params and forwarding calls that needed a matching `sim_mujoco` addition:
+```
+kinova.urdf.xacro  →  kortex_robot.xacro  →  gen3_lite_macro.xacro  →  kortex.ros2_control.xacro
+(top-level, what      (load_robot macro)     (load_arm macro)          (already identified above)
+ xacro is invoked on)
+```
+Checked via `grep -n "sim_gazebo\|sim_ignition\|sim_isaac\|sim_mujoco"` on each file before writing
+anything, to map the full depth in one pass rather than discovering a third level after already
+patching two.
+
+### 13. Wrote four maintained override files, same "never edit vendor" principle as before
+
+All four written to `docker/kortex_overrides/` (mirroring the vendor filenames exactly), each with a
+header comment documenting the precise diff from the original — same pattern as the parked,
+unused prefixed-controller-yaml from the earlier shared-URDF investigation, except these are
+actively wired in:
+- `gen3_lite_kortex.ros2_control.xacro` — the `sim_mujoco` plugin branch + `kp` params (see step 15
+  for a correction made to this file after the first test run).
+- `gen3_lite_macro.xacro` — `sim_mujoco:=false` param + forwarding + a `ros2_control_name` label
+  branch mirroring the existing `use_fake_hardware` one.
+- `kortex_robot.xacro` — `sim_mujoco:=false` param + forwarding to `load_arm`.
+- `kinova.urdf.xacro` — `<xacro:arg name="sim_mujoco" default="false" />` + forwarding to
+  `load_robot`. No new `<gazebo>`-style plugin block added here (unlike the `sim_gazebo`/
+  `sim_ignition` branches) — MuJoCo integration is entirely `<ros2_control>`-based, no Gazebo-style
+  plugin tags involved.
+
+All safety-relevant content (joint min/max limits, masses, inertias, mesh references) copied
+verbatim in every file — never modified, never re-derived.
+
+### 14. Installed live and tested the full compile chain
+
+```bash
+docker cp gen3_lite_kortex.ros2_control.xacro auro-laptop:/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/urdf/kortex.ros2_control.xacro
+docker cp kortex_robot.xacro auro-laptop:/kortex_ws/install/kortex_description/share/kortex_description/robots/kortex_robot.xacro
+docker cp kinova.urdf.xacro auro-laptop:/kortex_ws/install/kortex_description/share/kortex_description/robots/kinova.urdf.xacro
+```
+**First attempt failed**: `error: Invalid parameter "sim_mujoco" when instantiating macro: load_arm`
+— `gen3_lite_macro.xacro` had been written locally but never actually `docker cp`'d into the
+container (only the other three were copied). Copied the missed file, retried:
+```bash
+docker cp gen3_lite_macro.xacro auro-laptop:/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/urdf/gen3_lite_macro.xacro
+
+xacro /kortex_ws/install/kortex_description/share/kortex_description/robots/kinova.urdf.xacro \
+  name:=gen3_lite arm:=gen3_lite dof:=6 robot_ip:=192.168.1.10 \
+  gripper:=gen3_lite_2f gripper_joint_name:=right_finger_bottom_joint \
+  use_internal_bus_gripper_comm:=false \
+  sim_mujoco:=true \
+  -o /tmp/test_robot_description.urdf
+```
+**Result: exit code 0.** Verified the output directly:
+```bash
+grep -n "MujocoRosSystem\|<param name=\"kp\"" /tmp/test_robot_description.urdf
+```
+showed `<plugin>mujoco_ros_control/MujocoRosSystem</plugin>` and 7 `kp` entries — the full 4-file
+override chain compiles correctly end-to-end.
+
+### 15. Tested whether MuJoCo can load the URDF directly — yes, with one path fix
+
+```python
+import mujoco
+model = mujoco.MjModel.from_xml_path('/tmp/test_robot_description.urdf')
+```
+**First attempt failed**: `Error opening file 'file:///kortex_ws/.../forearm_link.STL'` — MuJoCo's
+mesh loader doesn't understand the `file://` URI scheme our xacro uses, it expects a plain
+filesystem path. Confirmed the file genuinely exists at that path (just without the prefix) before
+concluding it was a format issue, not a missing file. Fixed by stripping the prefix:
+```python
+with open('/tmp/test_robot_description.urdf') as f:
+    urdf = f.read()
+with open('/tmp/test_robot_description_fixed.urdf', 'w') as f:
+    f.write(urdf.replace('file://', ''))
+```
+**Result: complete success.** `nbody: 11`, `njnt: 10` — `joint_1`–`joint_6` plus all four gripper
+joints, matching the Gen3 Lite's real kinematic structure exactly, with **no separate MJCF authoring
+needed at all** — MuJoCo imports the existing, already-tested URDF directly.
+
+### 16. Built the actual launch flow — hit a second, different mesh-path issue
+
+`mujoco_node`'s `modelfile` parameter loads a physics model from a file path; `ros2_control`'s
+`robot_description` is fetched live as a parameter from `robot_state_publisher`. These are two
+different consumption paths needing two prepared files:
+```bash
+mkdir -p /tmp/mujoco_gen3_lite
+xacro .../kinova.urdf.xacro ... sim_mujoco:=true -o /tmp/mujoco_gen3_lite/robot_description.urdf
+python3 -c "
+with open('/tmp/mujoco_gen3_lite/robot_description.urdf') as f: urdf = f.read()
+with open('/tmp/mujoco_gen3_lite/robot_description_mujoco.urdf', 'w') as f:
+    f.write(urdf.replace('file://', ''))
+"
+```
+Minimal plugin config written by hand (`/tmp/mujoco_gen3_lite/plugin_config.yaml`) — deliberately
+started with **only** `joint_state_broadcaster`, no motion controller yet, to isolate "does the robot
+load and the hardware interface activate" from "does motion control work," same incremental
+de-risking used throughout this project:
+```yaml
+/mujoco_server:
+  ros__parameters:
+    MujocoPlugins.names: [mujoco_ros_control]
+    MujocoPlugins.mujoco_ros_control.type: mujoco_ros_control/MujocoRosControlPlugin
+/mujoco_server/mujoco_ros_control:
+  ros__parameters:
+    namespace: ""
+    robot_description_node: robot_state_publisher
+    robot_description: robot_description
+/controller_manager:
+  ros__parameters:
+    update_rate: 50
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+```
+```bash
+# on a fresh domain, distinct from the pendulum test's domain 2 and both arms' 0/1
+docker exec -e ROS_DOMAIN_ID=3 -e RMW_IMPLEMENTATION=rmw_cyclonedds_cpp -e DISPLAY="$DISPLAY" auro-laptop bash -c "
+ros2 launch mujoco_ros launch_server.launch.xml \
+  use_sim_time:=true \
+  modelfile:=/tmp/mujoco_gen3_lite/robot_description_mujoco.urdf \
+  verbose:=true \
+  mujoco_plugin_config:=/tmp/mujoco_gen3_lite/plugin_config.yaml
+"
+```
+**Failed**: `Error opening file '/tmp/mujoco_gen3_lite/base_link.STL': No such file or directory` — a
+*different* mesh-path problem than step 15's. Confirmed the mesh filenames in the file still had
+correct full absolute paths (ruled out a regeneration mistake), which revealed MuJoCo's actual
+behavior here: it resolves mesh filenames by **basename only, relative to the loaded XML's own
+directory**, discarding whatever directory the `filename` attribute specifies, absolute or not. Fixed
+by copying the actual mesh files alongside the URDF:
+```bash
+cp kortex_description/.../gen3_lite/6dof/meshes/*.STL /tmp/mujoco_gen3_lite/
+cp kortex_description/.../gen3_lite_2f/meshes/*.STL /tmp/mujoco_gen3_lite/
+```
+(11 files total — 6 arm links + 5 gripper links.)
+
+### 17. Real bug found: `kp` was in the wrong XML location
+
+Relaunched with meshes in place — model itself loaded correctly this time (`Model loaded in
+0.257784 seconds`), but the `mujoco_ros_control` plugin then failed:
+```
+Joint joint_1 needs a positive kp parameter for position fallback control.
+FATAL: Could not initialize robot simulation interface
+```
+Even though `kp` genuinely was present in the URDF. Root cause, traced back to
+`mujoco_ros_system.cpp`'s `initSim()`: it reads `joint_info.parameters.find("kp")` — the **joint-level**
+parameter map — but the override had nested `<param name="kp">` *inside* `<command_interface
+name="position">`, which populates the interface-level parameter map instead (correct for `min`/`max`,
+wrong for `kp`). Fixed in `gen3_lite_kortex.ros2_control.xacro` by moving `kp` to be a direct child of
+`<joint>`, for all 7 joints:
+```xml
+<!-- before (wrong) -->
+<joint name="joint_1">
+  <command_interface name="position">
+    <param name="min">-2.69</param>
+    <param name="kp">50.0</param>  <!-- wrong scope -->
+  </command_interface>
+</joint>
+<!-- after (correct) -->
+<joint name="joint_1">
+  <param name="kp">50.0</param>
+  <command_interface name="position">
+    <param name="min">-2.69</param>
+  </command_interface>
+</joint>
+```
+Re-copied the fixed file, regenerated both URDFs, killed and restarted `robot_state_publisher` (it
+was serving the pre-fix content from a static file, not something that re-reads changes) and
+`mujoco_node`. **Result: complete success** — `MujocoRosSystem` hardware interface fully
+initialized → configured → activated, all 7 joints matched by name, no errors.
+
+### 18. Viewer instability — unrelated to the integration itself
+
+Two separate GUI issues surfaced *after* the ROS-level integration had already succeeded, neither of
+which reflected a problem with the actual result:
+- First launch attempt: `XIO: fatal IO error 11 (Resource temporarily unavailable) on X server`
+  killed the whole `mujoco_node` process, immediately after the plugin load had already failed on
+  the step-17 `kp` bug (may have been coincidental/downstream of that failure, not investigated
+  further since the real bug was fixed anyway).
+- Second launch (post-fix): GUI showed a desktop "not responding" dialog. Checked `docker stats` and
+  the process's own CPU (167%, actively busy, not stuck at 0%) before deciding whether to Force Quit
+  — consistent with the same X11-forwarded-OpenGL vsync/CPU-load pattern already documented for RViz
+  (gotcha 10, `per_arm_bringup_sequence.md`), not a deadlock. Window was closed (not Force Quit) —
+  the underlying `mujoco_node` process survived, just with the viewer disconnected.
+- Checked for MuJoCo's offscreen-camera topics as an alternative visual (worked reliably in the
+  pendulum test) — none present, since the pendulum's 2 cameras were defined *inside its own
+  purpose-built MJCF*, not something added automatically for any loaded model. Our bare URDF has no
+  camera definitions at all.
+
+### 19. Clean relaunch — stable, robot rendered correctly
+
+Killed the unresponsive `mujoco_node`, relaunched fresh once system load had settled:
+```bash
+docker exec auro-laptop kill -9 <mujoco_node_pid>
+# same launch command as step 16
+```
+This time, `robot_state_publisher` was already up and ready, so the plugin load took 0.013 seconds
+(vs. ~19–45 seconds waiting on earlier attempts). **Result: stable, responsive viewer, 28 FPS,
+correctly rendered Gen3 Lite arm** (gray body, blue gripper fingers, matching the real robot's
+geometry). Scene background is black/empty — expected, not a bug: the pendulum's floor/lighting/
+skybox came from its own hand-authored MJCF scene file; our model is the bare URDF with none of that
+environment geometry defined. Resolves naturally once the real scene (table, floor, lighting, both
+arms) is built.
+
 ## Current state after this sequence
 
 - MuJoCo 3.3.5 installed at `/root/.mujoco/mujoco-3.3.5/` inside `auro-laptop`, env vars set in
@@ -263,7 +481,21 @@ processes exited cleanly.
   required yet).
 - The pendulum example fully validated on `ROS_DOMAIN_ID=2` — confirms `mujoco_ros_control`
   genuinely bridges `ros2_control` to real MuJoCo physics.
-- **Our own Gen3 Lite robot has not been loaded into MuJoCo yet.**
+- **Our own Gen3 Lite robot loads and renders correctly in MuJoCo**, validated on `ROS_DOMAIN_ID=3`:
+  `MujocoRosSystem` hardware interface fully activated, all 7 joints (`joint_1`–`joint_6`,
+  `right_finger_bottom_joint`) matched by name, `joint_state_broadcaster` running, native viewer
+  stable at 28 FPS showing the correctly-rendered arm.
+- Four maintained xacro overrides live in `docker/kortex_overrides/` (`kinova.urdf.xacro`,
+  `kortex_robot.xacro`, `gen3_lite_macro.xacro`, `gen3_lite_kortex.ros2_control.xacro`), installed
+  live over the vendor paths in the running container — **not yet added to `Dockerfile.server`**,
+  same durability gap as the MuJoCo install itself.
+- Generated artifacts live in `/tmp/mujoco_gen3_lite/` inside the container (both URDF variants, the
+  11 copied mesh STLs, `plugin_config.yaml`) — ephemeral, not saved anywhere durable yet.
+- Only `joint_state_broadcaster` is active — **no motion controller wired up yet** (no
+  `joint_trajectory_controller`/gripper controller in the plugin config), so the arm can't be
+  commanded to move through this setup yet, only observed at its default pose.
+- No camera/floor/lighting defined in the scene — background renders black/empty (expected, see
+  step 19).
 
 ## Known gotchas from this pass
 
@@ -289,23 +521,53 @@ processes exited cleanly.
    confusing, seemingly-contradictory errors (a controller reported "already loaded" immediately
    followed by "doesn't exist") rather than one obvious collision error — always check
    `echo $ROS_DOMAIN_ID` explicitly before debugging `ros2_control` failures further.
+7. A vendor xacro macro's `sim_*` params can be threaded through **multiple levels** of include/forward
+   chains — check the *entire* chain (`grep` each candidate file) before writing overrides, not just
+   the file with the actual `<plugin>` selection, or a fix will fail with `Invalid parameter` at
+   whichever level got missed.
+8. Easy to write an override file locally and forget to actually `docker cp` it into the running
+   container — got bitten by this directly (`gen3_lite_macro.xacro` written but not copied on the
+   first attempt). Re-verify with `docker exec ... cat`/`grep` after every copy, don't assume.
+9. In `ros2_control` URDF, `<param>` tags nested inside `<command_interface>`/`<state_interface>`
+   populate that *interface's* parameter map; `<param>` tags as a direct child of `<joint>` populate
+   the *joint's* parameter map — these are different maps read by different code paths.
+   `mujoco_ros_control`'s `kp`/`kv` fallback specifically reads the joint-level map. Getting this
+   placement wrong doesn't error at compile time (`xacro`/`colcon` both accept it silently) — it only
+   surfaces as a runtime error when the hardware plugin actually tries to read the parameter.
+10. MuJoCo's URDF mesh loading resolves `<mesh filename="...">` by **basename only, relative to the
+    loaded XML file's own directory** — it discards any directory component in the filename attribute
+    entirely, absolute path or not (confirmed: a `file://`-stripped *absolute* path still failed,
+    looking for the mesh in the URDF's own directory instead). Any URDF loaded directly into MuJoCo
+    needs its referenced mesh files physically copied alongside it.
+11. GUI "not responding" dialogs on an X11-forwarded OpenGL viewer aren't necessarily a hang — check
+    `docker stats`/process CPU% first (a process actively burning CPU, not stuck at 0%, is usually
+    just slow under load, not deadlocked) before force-quitting and losing a working session.
+    Consistent with the same rendering-load pattern already seen with RViz (gotcha 10 in
+    `per_arm_bringup_sequence.md`).
 
 ## Not yet done (next steps)
 
-- Point `mujoco_ros_control` at our own Gen3 Lite URDF (`robot_description` from `kortex_description`,
-  same one used for MoveIt2 all session) instead of the pendulum example.
-- Add `kp`/`kv` fallback parameters to our URDF's `<ros2_control>` joint tags — needed since MuJoCo's
-  actuator-name-matching convention (`{joint}_act_pos` etc.) almost certainly isn't already present
-  in our existing URDF, and the `kp`/`kv` PD-fallback path is the lower-effort alternative to
-  authoring named actuators.
+- Wire up an actual motion controller (`joint_trajectory_controller` + a gripper controller,
+  matching what's already used for the real/fake-hardware Kinova stack all session) in the plugin
+  config — currently only `joint_state_broadcaster` is active, so the arm can be observed but not
+  commanded to move.
+- Tune the `kp` values — current values (50/50/50/30/30/30/10) are untuned starting points, not
+  measured; need to watch actual commanded motion once a motion controller is wired up, and adjust
+  for tracking authority vs. oscillation.
 - Build the actual shared scene (table + both arms at the 1.10 m facing-each-other layout + cup/straw
-  objects) — this is genuinely new authoring work, not something MuJoCo generates automatically.
+  objects, floor, lighting) — this is genuinely new authoring work, not something MuJoCo generates
+  automatically. Also resolves the current black/empty background.
+- Add a camera to the scene (for offscreen-rendering-based visual confirmation via `rqt_image_view`,
+  as an alternative to the native viewer) — deferred in favor of getting the native viewer working
+  first; both are worth having once the real scene exists.
 - Commit to the **namespace-separated** (not domain-isolated) architecture for the eventual dual-arm
   scene, since `rclcpp::init()` happens once per MuJoCo process — both robots in one shared scene
-  will necessarily share one `ROS_DOMAIN_ID`, differentiated by namespace instead. This pendulum test
-  used a single robot on its own dedicated domain (2); the real dual-arm scene will need its own
-  planning for which domain hosts both namespaced robots together.
-- Add MuJoCo + `mujoco_ros_pkgs` installation to `Dockerfile.server` for durability, once the Gen3
-  Lite integration is also validated (same "validate before persisting" pattern used for
-  `domain_bridge` and the `setuptools`/`packaging` fix).
-- Install `libglfw3-dev` if/when the interactive `simulate` GUI viewer is wanted.
+  will necessarily share one `ROS_DOMAIN_ID`, differentiated by namespace instead. Both the pendulum
+  test and this single-arm test used one robot on its own dedicated domain (2, then 3); the real
+  dual-arm scene will need its own planning for which domain hosts both namespaced robots together.
+- Add MuJoCo + `mujoco_ros_pkgs` **and** the four xacro overrides to `Dockerfile.server` for
+  durability — now that the full single-arm integration is validated end-to-end, this is ready to do
+  (same "validate before persisting" pattern used for `domain_bridge` and the `setuptools`/`packaging`
+  fix). Currently everything from Part 2 exists only live in the running container.
+- Move the generated artifacts (`/tmp/mujoco_gen3_lite/*`) somewhere durable/repo-tracked once the
+  launch flow is turned into an actual launch file, rather than hand-run commands against `/tmp`.
