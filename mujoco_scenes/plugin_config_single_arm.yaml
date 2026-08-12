@@ -1,0 +1,69 @@
+# mujoco_ros_control plugin + controller_manager config for the single-arm MuJoCo
+# test scene (mujoco_scenes/scene_single_arm.xml). Repo-tracked copy of what was
+# previously hand-authored ad hoc in /tmp/mujoco_gen3_lite/plugin_config.yaml —
+# see mujoco_installation_sequence.md for the launch command that consumes this file.
+#
+# joint_trajectory_controller / gen3_lite_2f_gripper_controller blocks are copied
+# verbatim (joint names, interfaces, gains) from the vendor's own
+# ros2_kortex/kortex_description/arms/gen3_lite/6dof/config/ros2_controllers.yaml —
+# same controllers already used for the real/fake-hardware Gen3 Lite stack all
+# session, just added under this MuJoCo-hosted controller_manager instead of a
+# separately-launched one. twist_controller/fault_controller intentionally omitted
+# (MoveIt-servo specific, not needed for direct joint-trajectory motion testing).
+/mujoco_server:
+  ros__parameters:
+    MujocoPlugins.names:
+      - mujoco_ros_control
+    MujocoPlugins.mujoco_ros_control.type: mujoco_ros_control/MujocoRosControlPlugin
+
+/mujoco_server/mujoco_ros_control:
+  ros__parameters:
+    namespace: ""
+    robot_description_node: robot_state_publisher
+    robot_description: robot_description
+
+/controller_manager:
+  ros__parameters:
+    # 500 Hz, matching MuJoCo's default 0.002s physics timestep (no <option timestep>
+    # override in gen3_lite.xml/scene_single_arm.xml) — mujoco_ros_control's
+    # PassiveCallback/ControlCallback fire on every physics step, and
+    # ControllerManager::update() internally throttles to update_rate, so the
+    # original 50 Hz meant our kp-only fallback P controller (no damping/D term,
+    # see mujoco_ros_system.cpp: effort = kp * (cmd - actual)) was only correcting
+    # 1 time per 10 physics steps — a 20ms discretization delay, easily enough to
+    # destabilize a plant like this into oscillation. Matching the physics rate
+    # removes that as a variable before tuning kp itself.
+    update_rate: 500
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    gen3_lite_2f_gripper_controller:
+      type: position_controllers/GripperActionController
+
+joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - joint_1
+      - joint_2
+      - joint_3
+      - joint_4
+      - joint_5
+      - joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+gen3_lite_2f_gripper_controller:
+  ros__parameters:
+    default: true
+    joint: right_finger_bottom_joint
+    allow_stalling: true

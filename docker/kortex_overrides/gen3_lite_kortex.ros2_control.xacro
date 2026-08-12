@@ -4,7 +4,7 @@
   kortex_description/arms/gen3_lite/6dof/urdf/kortex.ros2_control.xacro
   (vendor original, never edited directly — see mujoco_installation_sequence.md).
 
-  Diff from the vendor original, two changes only:
+  Diff from the vendor original, three changes:
     1. New `sim_mujoco` param + hardware-plugin branch, added following the exact
        same pattern already used here for sim_gazebo/sim_ignition/sim_isaac —
        selects mujoco_ros_control/MujocoRosSystem. Also added `sim_mujoco` to the
@@ -15,16 +15,35 @@
        one min/max use; got this wrong on the first pass, confirmed by an actual
        runtime error: "Joint joint_1 needs a positive kp parameter for position
        fallback control" even with kp present but in the wrong XML location).
-       Required by MujocoRosSystem's fallback PD-control path (mujoco_ros_system.cpp,
-       reviewed during the mujoco_ros_pkgs integration) whenever a joint has no
-       matching named MuJoCo actuator ({joint}_act_pos) — which is our case,
-       since the scene doesn't hand-author actuators for these joints.
+       Required whenever a joint has no matching named MuJoCo actuator
+       ({joint}_act_pos) — which is our case, since the scene doesn't hand-author
+       actuators for these joints. NOTE: despite "PD" naming conventions elsewhere,
+       this fallback (mujoco_ros_system.cpp, reviewed directly) is pure-P for the
+       position command interface: effort = kp * (cmd - actual), full stop — `kv`
+       exists in the same source but is only ever read for a *separate* velocity
+       command-interface fallback, never combined with kp here. Any damping/D-term
+       behavior has to come from the physics model itself (see the `damping`
+       attribute added to each <joint> in mujoco_scenes/gen3_lite.xml), not from
+       this controller.
+    3. Added an `effort_limit` param alongside `kp` on every actuated <joint>,
+       clamping the fallback's otherwise-unbounded P-control torque (defaults to
+       numeric_limits::max() if absent — confirmed by source review, not assumed).
+       Values are the real per-joint torque limits from the vendor URDF's own
+       <limit effort="..."/> tags (gen3_lite_macro.xacro for joints 1-6,
+       gen3_lite_2f_macro.xacro's 0/0.85-range variant for the gripper) — the same
+       numbers already present, inertly, as `actuatorfrcrange` in the converted
+       gen3_lite.xml (inert because that attribute only constrains MuJoCo
+       <actuator> elements, which this model doesn't define). Added *before*
+       raising kp values below, specifically so a higher kp can't demand
+       physically-unrealistic torque.
 
-  kp values below are UNTUNED STARTING POINTS, not measured/verified — same
-  placeholder status as OTHER_ARM_KEEPOUT in kinova_pick_planner.py. Expect to
-  adjust once the arm can actually be watched moving in MuJoCo: too low and it
-  won't track the commanded position with any authority, too high and it will
-  oscillate/overshoot.
+  kp values below are UNTUNED STARTING POINTS, being tuned empirically via a
+  scripted step-response test (send a step goal through joint_trajectory_controller,
+  record /joint_states, measure overshoot/settle error) — see
+  mujoco_installation_sequence.md for the measured results and reasoning behind
+  each value. Too low and the joint can't hold position against gravity (measured:
+  joint_2 at kp=50 settled ~0.2 rad past a commanded target and stayed there —
+  gravity droop, not oscillation); too high and it will overshoot/oscillate.
 
   All joint limits (min/max) below are copied verbatim from the vendor original
   — not modified, not re-derived — these are the ones to trust as correct.
@@ -129,6 +148,7 @@
       </hardware>
       <joint name="${prefix}joint_1">
         <param name="kp">50.0</param>
+        <param name="effort_limit">10.0</param>
         <command_interface name="position">
           <param name="min">-2.69</param>
           <param name="max">2.69</param>
@@ -140,7 +160,8 @@
         <state_interface name="effort"/>
       </joint>
       <joint name="${prefix}joint_2">
-        <param name="kp">50.0</param>
+        <param name="kp">250.0</param>
+        <param name="effort_limit">14.0</param>
         <command_interface name="position">
           <param name="min">-2.69</param>
           <param name="max">2.36</param>
@@ -153,6 +174,7 @@
       </joint>
       <joint name="${prefix}joint_3">
         <param name="kp">50.0</param>
+        <param name="effort_limit">10.0</param>
         <command_interface name="position">
           <param name="min">-2.69</param>
           <param name="max">2.69</param>
@@ -165,6 +187,7 @@
       </joint>
       <joint name="${prefix}joint_4">
         <param name="kp">30.0</param>
+        <param name="effort_limit">7.0</param>
         <command_interface name="position">
           <param name="min">-2.59</param>
           <param name="max">2.59</param>
@@ -177,6 +200,7 @@
       </joint>
       <joint name="${prefix}joint_5">
         <param name="kp">30.0</param>
+        <param name="effort_limit">7.0</param>
         <command_interface name="position">
           <param name="min">-2.57</param>
           <param name="max">2.57</param>
@@ -189,6 +213,7 @@
       </joint>
       <joint name="${prefix}joint_6">
         <param name="kp">30.0</param>
+        <param name="effort_limit">7.0</param>
         <command_interface name="position">
           <param name="min">-2.59</param>
           <param name="max">2.59</param>
@@ -203,6 +228,7 @@
         <xacro:unless value="${moveit_active}">
           <joint name="${prefix}right_finger_bottom_joint">
             <param name="kp">10.0</param>
+            <param name="effort_limit">50.0</param>
             <command_interface name="position"/>
             <state_interface name="position"/>
             <state_interface name="velocity"/>
@@ -212,6 +238,7 @@
       <xacro:if value="${moveit_active}">
         <joint name="${prefix}right_finger_bottom_joint">
           <param name="kp">10.0</param>
+          <param name="effort_limit">50.0</param>
           <command_interface name="position"/>
           <state_interface name="position"/>
           <state_interface name="velocity"/>

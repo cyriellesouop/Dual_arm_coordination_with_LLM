@@ -1,0 +1,81 @@
+<mujoco model="gen3_lite">
+  <compiler angle="radian"/>
+
+  <asset>
+    <mesh name="base_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/base_link.STL"/>
+    <mesh name="shoulder_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/shoulder_link.STL"/>
+    <mesh name="arm_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/arm_link.STL"/>
+    <mesh name="forearm_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/forearm_link.STL"/>
+    <mesh name="lower_wrist_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/lower_wrist_link.STL"/>
+    <mesh name="upper_wrist_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/arms/gen3_lite/6dof/meshes/upper_wrist_link.STL"/>
+    <mesh name="gripper_base_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/grippers/gen3_lite_2f/meshes/gripper_base_link.STL"/>
+    <mesh name="right_finger_prox_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/grippers/gen3_lite_2f/meshes/right_finger_prox_link.STL"/>
+    <mesh name="right_finger_dist_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/grippers/gen3_lite_2f/meshes/right_finger_dist_link.STL"/>
+    <mesh name="left_finger_prox_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/grippers/gen3_lite_2f/meshes/left_finger_prox_link.STL"/>
+    <mesh name="left_finger_dist_link" content_type="model/stl" file="/kortex_ws/install/kortex_description/share/kortex_description/grippers/gen3_lite_2f/meshes/left_finger_dist_link.STL"/>
+  </asset>
+
+  <worldbody>
+    <!-- Wrapping body added (not present in the raw mj_saveLastXML output) so the whole
+         robot can be repositioned/reoriented by editing this one pos/quat, without
+         touching every individual link. Edit THIS to move the robot — not scene files
+         that <include> this one, since <include> doesn't support a pos attribute. -->
+    <body name="gen3_lite_base" pos="0 0 0" quat="1 0 0 0">
+    <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="base_link"/>
+    <body name="shoulder_link" pos="0 0 0.12825">
+      <inertial pos="2.477e-05 0.0221353 0.0993769" quat="0.972429 0.233194 -0.000430944 0.00108761" mass="0.959744" diaginertia="0.00165947 0.00158128 0.000717195"/>
+      <!-- damping added (not present in the raw mj_saveLastXML output): mujoco_ros_control's
+           position fallback controller is pure-P (effort = kp * (cmd - actual), see
+           mujoco_ros_system.cpp) with no D term, so without physical joint damping here
+           the arm oscillates around commanded positions instead of settling. Values are
+           tuned starting points, larger for the heavier-loaded shoulder/elbow joints. -->
+      <joint name="joint_1" pos="0 0 0" axis="0 0 1" range="-2.68 2.68" actuatorfrcrange="-10 10" damping="2.0"/>
+      <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="shoulder_link"/>
+      <body name="arm_link" pos="0 -0.03 0.115" quat="0.707105 0.707108 0 0">
+        <inertial pos="0.029983 0.211548 0.0453031" quat="0.534676 0.467794 -0.46336 0.529706" mass="1.17756" diaginertia="0.0115237 0.0114928 0.000839712"/>
+        <joint name="joint_2" pos="0 0 0" axis="0 0 1" range="-2.61 2.61" actuatorfrcrange="-14 14" damping="2.0"/>
+        <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="arm_link"/>
+        <body name="forearm_link" pos="0 0.28 0" quat="-3.67321e-06 -1 0 0">
+          <inertial pos="0.0301559 0.0950221 0.0073555" quat="0.523543 0.49139 -0.473675 0.50997" mass="0.597677" diaginertia="0.00169754 0.00163253 0.000291376"/>
+          <joint name="joint_3" pos="0 0 0" axis="0 0 1" range="-2.61 2.61" actuatorfrcrange="-10 10" damping="2.0"/>
+          <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="forearm_link"/>
+          <body name="lower_wrist_link" pos="0 -0.14 0.02" quat="0.707105 0.707108 0 0">
+            <inertial pos="0.00575149 0.0100044 0.0871921" quat="0.700403 -0.13124 -0.134345 0.688595" mass="0.526934" diaginertia="0.000785199 0.000756398 0.000275722"/>
+            <joint name="joint_4" pos="0 0 0" axis="0 0 1" range="-2.6 2.6" actuatorfrcrange="-7 7" damping="0.5"/>
+            <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="lower_wrist_link"/>
+            <body name="upper_wrist_link" pos="0.0285 0 0.105" quat="0.707105 0 0.707108 0">
+              <inertial pos="0.0805652 0.00980409 0.018728" quat="0.00431726 0.708285 -4.18922e-06 0.705913" mass="0.580973" diaginertia="0.00108466 0.00106374 0.000212638"/>
+              <joint name="joint_5" pos="0 0 0" axis="0 0 1" range="-2.53 2.53" actuatorfrcrange="-7 7" damping="0.5"/>
+              <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="upper_wrist_link"/>
+              <body name="end_effector_link" pos="-0.105 0 0.0285" quat="0.707105 0 -0.707108 0">
+                <joint name="joint_6" pos="0 0 0" axis="0 0 1" range="-2.6 2.6" actuatorfrcrange="-7 7" damping="0.5"/>
+                <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="gripper_base_link"/>
+                <body name="right_finger_prox_link" pos="0 -0.030501 0.070003" quat="0.627167 0.326463 0.6273 0.326463">
+                  <inertial pos="0.020257 0.0063483 6.991e-05" quat="0.598941 0.598941 0.375858 0.375858" mass="0.018385" diaginertia="5.25068e-06 4.77e-06 1.59932e-06"/>
+                  <joint name="right_finger_bottom_joint" pos="0 0 0" axis="0 0 -1" range="0 0.85" actuatorfrcrange="-50 50" damping="0.2"/>
+                  <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="right_finger_prox_link"/>
+                  <body name="right_finger_dist_link" pos="-0.045636 0.020423 0">
+                    <inertial pos="0.018488 0.0011091 0" quat="0.557345 0.557345 0.435162 0.435162" mass="0.010748" diaginertia="1.91e-06 1.61e-06 5.5e-07"/>
+                    <joint name="right_finger_tip_joint" pos="0 0 0" axis="0 0 1" range="-0.5 0.21" actuatorfrcrange="-1000 1000"/>
+                    <geom type="mesh" rgba="0 0.055 0.525 1" mesh="right_finger_dist_link"/>
+                  </body>
+                </body>
+                <body name="left_finger_prox_link" pos="0 0.0305 0.070003" quat="0.627167 -0.326463 0.6273 -0.326463">
+                  <inertial pos="0.020257 0.0063483 6.99e-05" quat="0.598941 0.598941 0.375858 0.375858" mass="0.018385" diaginertia="5.25068e-06 4.77e-06 1.59932e-06"/>
+                  <joint name="left_finger_bottom_joint" pos="0 0 0" axis="0 0 1" range="0 0.85" actuatorfrcrange="-1000 1000"/>
+                  <geom type="mesh" rgba="0.803 0.824 0.82 1" mesh="left_finger_prox_link"/>
+                  <body name="left_finger_dist_link" pos="-0.045636 -0.020423 6.9901e-05">
+                    <inertial pos="-0.018488 0.0011091 0" quat="0.557345 0.557345 0.435162 0.435162" mass="0.010748" diaginertia="1.91e-06 1.61e-06 5.5e-07"/>
+                    <joint name="left_finger_tip_joint" pos="0 0 0" axis="0 0 -1" range="-0.5 0.21" actuatorfrcrange="-1000 1000"/>
+                    <geom type="mesh" rgba="0 0.055 0.525 1" mesh="left_finger_dist_link"/>
+                  </body>
+                </body>
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+    </body>
+  </worldbody>
+</mujoco>

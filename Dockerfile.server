@@ -77,6 +77,22 @@ RUN mkdir -p /kortex_ws/src && \
     git clone https://github.com/AndrejOrsula/pymoveit2.git && \
     git clone https://github.com/picknikrobotics/picknik_controllers.git -b humble
 
+# Maintained overrides (never edit the vendor files above directly — see
+# mujoco_installation_sequence.md Part 2 for the full diff/rationale behind each).
+# Add a sim_mujoco branch + kp fallback params to the Gen3 Lite ros2_control xacro
+# chain, following the exact same pattern already used there for
+# sim_gazebo/sim_ignition/sim_isaac. Copied over the SRC paths (not the installed
+# share paths) so the colcon build below installs them the normal way, same as
+# every other file in this clone.
+COPY docker/kortex_overrides/kinova.urdf.xacro \
+     /kortex_ws/src/ros2_kortex/kortex_description/robots/kinova.urdf.xacro
+COPY docker/kortex_overrides/kortex_robot.xacro \
+     /kortex_ws/src/ros2_kortex/kortex_description/robots/kortex_robot.xacro
+COPY docker/kortex_overrides/gen3_lite_macro.xacro \
+     /kortex_ws/src/ros2_kortex/kortex_description/arms/gen3_lite/6dof/urdf/gen3_lite_macro.xacro
+COPY docker/kortex_overrides/gen3_lite_kortex.ros2_control.xacro \
+     /kortex_ws/src/ros2_kortex/kortex_description/arms/gen3_lite/6dof/urdf/kortex.ros2_control.xacro
+
 # Build the full workspace (kortex stack + pymoveit2 + picknik_controllers + robotiq)
 # kortex_api uses FetchContent to download the Kinova binary API at build time
 RUN cd /kortex_ws && \

@@ -470,9 +470,8 @@ arms) is built.
 ## Current state after this sequence
 
 - MuJoCo 3.3.5 installed at `/root/.mujoco/mujoco-3.3.5/` inside `auro-laptop`, env vars set in
-  `/root/.bashrc` (live in the container only — **not yet added to `Dockerfile.server`**, so this
-  will be lost if the container is recreated; same durability gap as everything before it gets made
-  permanent).
+  `/root/.bashrc` **and now also in `Dockerfile.server`** — validated via a full `docker build` from
+  scratch.
 - MuJoCo 3.9.0 also still present at `/root/.mujoco/mujoco-3.9.0/` (never removed — harmless to leave,
   not referenced by any current env var).
 - `mujoco_ros_pkgs` (`hybrid-devel` branch) cloned into `/kortex_ws/src/mujoco_ros_pkgs/`, all 7
@@ -481,21 +480,20 @@ arms) is built.
   required yet).
 - The pendulum example fully validated on `ROS_DOMAIN_ID=2` — confirms `mujoco_ros_control`
   genuinely bridges `ros2_control` to real MuJoCo physics.
-- **Our own Gen3 Lite robot loads and renders correctly in MuJoCo**, validated on `ROS_DOMAIN_ID=3`:
-  `MujocoRosSystem` hardware interface fully activated, all 7 joints (`joint_1`–`joint_6`,
-  `right_finger_bottom_joint`) matched by name, `joint_state_broadcaster` running, native viewer
-  stable at 28 FPS showing the correctly-rendered arm.
+- **Our own Gen3 Lite robot loads, renders, and can be commanded to move correctly in MuJoCo**,
+  validated on `ROS_DOMAIN_ID=3`: `MujocoRosSystem` hardware interface fully activated, all 7 joints
+  matched by name, `joint_state_broadcaster` + `joint_trajectory_controller` +
+  `gen3_lite_2f_gripper_controller` all active, kp/damping/effort_limit tuned from measured
+  step-response data. Full detail in `mujoco_motion_controller_tuning.md`.
 - Four maintained xacro overrides live in `docker/kortex_overrides/` (`kinova.urdf.xacro`,
   `kortex_robot.xacro`, `gen3_lite_macro.xacro`, `gen3_lite_kortex.ros2_control.xacro`), installed
-  live over the vendor paths in the running container — **not yet added to `Dockerfile.server`**,
-  same durability gap as the MuJoCo install itself.
+  live over the vendor paths in the running container **and now also `COPY`'d in `Dockerfile.server`**,
+  validated via a full rebuild.
 - Generated artifacts live in `/tmp/mujoco_gen3_lite/` inside the container (both URDF variants, the
   11 copied mesh STLs, `plugin_config.yaml`) — ephemeral, not saved anywhere durable yet.
-- Only `joint_state_broadcaster` is active — **no motion controller wired up yet** (no
-  `joint_trajectory_controller`/gripper controller in the plugin config), so the arm can't be
-  commanded to move through this setup yet, only observed at its default pose.
-- No camera/floor/lighting defined in the scene — background renders black/empty (expected, see
-  step 19).
+- A real single-arm scene exists: `mujoco_scenes/scene_single_arm.xml` (table, floor, lighting, two
+  placeholder objects, an `overview` camera) including `mujoco_scenes/gen3_lite.xml` (native MJCF,
+  repositionable via its `gen3_lite_base` wrapper body) — background is no longer black/empty.
 
 ## Known gotchas from this pass
 
@@ -547,27 +545,29 @@ arms) is built.
 
 ## Not yet done (next steps)
 
-- Wire up an actual motion controller (`joint_trajectory_controller` + a gripper controller,
-  matching what's already used for the real/fake-hardware Kinova stack all session) in the plugin
-  config — currently only `joint_state_broadcaster` is active, so the arm can be observed but not
-  commanded to move.
-- Tune the `kp` values — current values (50/50/50/30/30/30/10) are untuned starting points, not
-  measured; need to watch actual commanded motion once a motion controller is wired up, and adjust
-  for tracking authority vs. oscillation.
-- Build the actual shared scene (table + both arms at the 1.10 m facing-each-other layout + cup/straw
-  objects, floor, lighting) — this is genuinely new authoring work, not something MuJoCo generates
-  automatically. Also resolves the current black/empty background.
+- ~~Wire up an actual motion controller (`joint_trajectory_controller` + a gripper controller...)~~ —
+  **done**, along with tuning `kp`/`effort_limit`/joint damping based on measured step-response data.
+  Full narrative in `mujoco_motion_controller_tuning.md`; only `joint_2`'s `kp` (50→250) actually
+  needed changing, everything else verified fine at its original value.
+- ~~Build the actual shared scene (table + arm + objects, floor, lighting)~~ — **done** for the
+  single-arm case: `mujoco_scenes/scene_single_arm.xml` + `mujoco_scenes/gen3_lite.xml` (native MJCF,
+  converted from the URDF via `mj_saveLastXML`, with a `gen3_lite_base` wrapper `<body>` added for
+  repositioning — edit its `pos`/`quat` to move the robot). Not yet done for the dual-arm case (see
+  below).
 - Add a camera to the scene (for offscreen-rendering-based visual confirmation via `rqt_image_view`,
-  as an alternative to the native viewer) — deferred in favor of getting the native viewer working
-  first; both are worth having once the real scene exists.
+  as an alternative to the native viewer) — `scene_single_arm.xml` already has one `overview` camera;
+  revisit once useful for perception, not needed for the motion-control work so far.
 - Commit to the **namespace-separated** (not domain-isolated) architecture for the eventual dual-arm
   scene, since `rclcpp::init()` happens once per MuJoCo process — both robots in one shared scene
   will necessarily share one `ROS_DOMAIN_ID`, differentiated by namespace instead. Both the pendulum
   test and this single-arm test used one robot on its own dedicated domain (2, then 3); the real
   dual-arm scene will need its own planning for which domain hosts both namespaced robots together.
-- Add MuJoCo + `mujoco_ros_pkgs` **and** the four xacro overrides to `Dockerfile.server` for
-  durability — now that the full single-arm integration is validated end-to-end, this is ready to do
-  (same "validate before persisting" pattern used for `domain_bridge` and the `setuptools`/`packaging`
-  fix). Currently everything from Part 2 exists only live in the running container.
+  **Next task to start.**
+- ~~Add MuJoCo + `mujoco_ros_pkgs` **and** the four xacro overrides to `Dockerfile.server`~~ — **done
+  and validated**: a full `docker build` from scratch exercising this exact sequence completed
+  successfully (exit code 0).
+- Add `mujoco_scenes/*` (scene files + `plugin_config_single_arm.yaml`) to `Dockerfile.server` —
+  **deliberately deferred** until the dual-arm scene work is further along, so it's done once instead
+  of twice (explicit decision, not an oversight).
 - Move the generated artifacts (`/tmp/mujoco_gen3_lite/*`) somewhere durable/repo-tracked once the
   launch flow is turned into an actual launch file, rather than hand-run commands against `/tmp`.
