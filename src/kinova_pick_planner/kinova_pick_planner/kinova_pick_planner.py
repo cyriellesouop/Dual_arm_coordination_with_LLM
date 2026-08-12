@@ -114,6 +114,34 @@ TABLE_POSITION = {
 
 
 # =============================================================================
+# DUAL-ARM STATIC KEEPOUT (domain-isolated architecture — see
+# per_arm_bringup_sequence.md)
+# =============================================================================
+# Both arms are physically mounted facing each other across the shared
+# table, base-to-base distance 1.10 m. Each arm's own +X axis points toward
+# the other arm's base by construction (that's what "facing each other"
+# means), so the same offset is correct in both arms' local base_link
+# frames without modification — this code does not need to differ per arm.
+#
+# The two arms do not share TF/planning scene (confirmed in
+# per_arm_bringup_sequence.md step 15: each arm's MoveIt2 instance has an
+# identity world->base_link transform and has no notion the other arm
+# exists). This keepout is therefore a static approximation, not a live
+# collision check — it does not update if the other arm moves outside this
+# conservative envelope.
+OTHER_ARM_BASE_DISTANCE_X = 1.10  # meters, base-to-base — physical rig measurement
+
+# Box size is a conservative PLACEHOLDER for the Gen3 Lite's body+reach
+# envelope, not a measured value. Tighten once the physical rig exists and
+# the other arm's actual reach/resting posture is known.
+OTHER_ARM_KEEPOUT = {
+    "depth":  0.60,  # along the approach axis (X), placeholder
+    "width":  0.60,  # across (Y), placeholder
+    "height": 0.90,  # from table surface up, placeholder
+}
+
+
+# =============================================================================
 # OBJECT TYPES
 # =============================================================================
 
@@ -613,6 +641,23 @@ class KinovaPickPlanner(Node):
         )
         self._collision_ids.add("table_keepout")
         self.get_logger().info("Table added to planning scene")
+
+    def add_other_arm_keepout(self):
+        """Add a static collision box for the other arm's approximate footprint.
+
+        See OTHER_ARM_BASE_DISTANCE_X / OTHER_ARM_KEEPOUT above — placeholder
+        dimensions until the physical rig exists to measure the real envelope.
+        """
+        self.arm.add_collision_box(
+            id="other_arm_keepout",
+            size=(OTHER_ARM_KEEPOUT["depth"], OTHER_ARM_KEEPOUT["width"],
+                  OTHER_ARM_KEEPOUT["height"]),
+            position=(OTHER_ARM_BASE_DISTANCE_X, 0.0,
+                      TABLE_SURFACE_Z + OTHER_ARM_KEEPOUT["height"] / 2),
+            quat_xyzw=(0.0, 0.0, 0.0, 1.0),
+        )
+        self._collision_ids.add("other_arm_keepout")
+        self.get_logger().info("Other-arm keepout zone added to planning scene")
 
     def add_collision_object(self, obj_id: str, obj_type_name: str,
                               x: float, y: float, z_above_table: float,

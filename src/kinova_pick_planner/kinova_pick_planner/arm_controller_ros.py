@@ -149,6 +149,7 @@ class ArmControllerROS(Node):
         self.get_logger().info("Connecting to MoveIt2 (must be running externally)...")
         self.planner = KinovaPickPlanner()
         self.planner.add_table()
+        self.planner.add_other_arm_keepout()
 
         self._record_home_position()
         self.planner._home_joints = HOME_JOINT_POSITIONS.copy()

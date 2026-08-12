@@ -90,6 +90,16 @@ RUN cd /kortex_ws && \
 # breaking the ros-humble-cv-bridge binary which was compiled against the NumPy 1.x ABI.
 RUN pip install torch ultralytics ollama faster-whisper pyttsx3 sounddevice scipy edge-tts "numpy<2" --quiet
 
+# torch/ultralytics silently pull in a newer setuptools whose _core_metadata.py calls
+# packaging.utils.canonicalize_version(..., strip_trailing_zero=False) — a keyword the
+# older packaging pinned by ROS Humble's base image doesn't support. This breaks every
+# later `colcon build` of any package in this workspace (including the live builds
+# run_arm_llm_tmux.sh / run_perception_control_tmux.sh do on every container startup)
+# with: TypeError: canonicalize_version() got an unexpected keyword argument
+# 'strip_trailing_zero'. Re-pin both to a known-compatible pairing, last, so nothing
+# installed above can silently re-break it.
+RUN pip install "setuptools<80" "packaging>=23.2" --quiet
+
 # Source ROS, workspace, and set CycloneDDS as RMW (required for MoveIt + kortex)
 RUN echo "source /opt/ros/humble/setup.bash" >> /root/.bashrc && \
     echo "source /kortex_ws/install/setup.bash" >> /root/.bashrc && \

@@ -117,6 +117,7 @@ class ArmController(Node):
         self.get_logger().info("Initializing pick planner...")
         self.planner = KinovaPickPlanner()
         self.planner.add_table()
+        self.planner.add_other_arm_keepout()
 
         # Record home
         self._record_home_position()
