@@ -31,6 +31,9 @@ RUN apt-get update && apt-get install -y \
     ros-humble-ros2-control \
     ros-humble-ros2-controllers \
     ros-humble-domain-bridge \
+    ros-humble-py-binding-tools \
+    ros-humble-camera-info-manager \
+    libglfw3-dev \
     espeak-ng \
     alsa-utils \
     libasound2-plugins \
@@ -84,6 +87,43 @@ RUN cd /kortex_ws && \
             --skip-keys 'ament_clang_format ament_clang_tidy gazebo_ros2_control parallel_gripper_controller robotiq_description' && \
         colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release && \
         rm -rf /var/lib/apt/lists/*"
+
+# --- MuJoCo physics simulator + mujoco_ros_pkgs (ros2_control bridge) ---
+# See mujoco_installation_sequence.md for the full validation history (version
+# choice, dependency gaps, domain-collision debugging) behind this block.
+ENV MUJOCO_DIR=/root/.mujoco/mujoco-3.3.5
+ENV LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$MUJOCO_DIR/lib
+ENV LIBRARY_PATH=$LIBRARY_PATH:$MUJOCO_DIR/lib
+
+# 3.3.5 specifically, not the latest release: mujoco_ros_pkgs' hybrid-devel
+# branch was written against this API surface. Newer MuJoCo (tested: 3.9.0)
+# renames/removes several enum constants and struct fields it depends on
+# (e.g. mjENBL_ISLAND, mjOption.apirate) and fails to compile against it.
+RUN mkdir -p /root/.mujoco && \
+    curl -L -o /tmp/mujoco.tar.gz \
+        https://github.com/google-deepmind/mujoco/releases/download/3.3.5/mujoco-3.3.5-linux-x86_64.tar.gz && \
+    tar -xzf /tmp/mujoco.tar.gz -C /root/.mujoco && \
+    rm /tmp/mujoco.tar.gz
+
+# mujoco_ros_pkgs (ubi-agni / Bielefeld University) provides mujoco_ros_control,
+# the ros2_control hardware-interface plugin that bridges MuJoCo physics to the
+# same controller_manager stack the Kinova arms already use. hybrid-devel
+# branch supports ROS1 and ROS2 Humble from one codebase. Cloned into
+# kortex_ws/src after that workspace's own build above (not before) so this
+# doesn't interact with its rosdep resolution pass.
+RUN cd /kortex_ws/src && \
+    git clone -b hybrid-devel https://github.com/ubi-agni/mujoco_ros_pkgs.git
+
+RUN cd /kortex_ws && \
+    /bin/bash -c "source /opt/ros/humble/setup.bash && \
+        source /kortex_ws/install/setup.bash && \
+        colcon build --packages-select mujoco_ros mujoco_ros_msgs mujoco_ros_testing_utils mujoco_ros_sensors mujoco_ros_laser mujoco_ros_mocap mujoco_ros_control"
+
+# Python MuJoCo bindings — not required for the ros2_control C++ plugin above,
+# but needed for mujoco_ros' own Python binding tests, and useful later for
+# scripting scene construction (placing table/object geometry) rather than
+# hand-authoring MJCF/XML. numpy<2 re-pinned defensively, same reason as below.
+RUN pip install mujoco "numpy<2" --quiet
 
 # Python: vision/detection + llm + audio
 # numpy<2 is pinned again here because ultralytics/torch would otherwise upgrade it,
