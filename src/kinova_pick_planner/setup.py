@@ -28,6 +28,8 @@ setup(
             'pick_planner = kinova_pick_planner.kinova_pick_planner:demo_scenario',
             'arm_test = kinova_pick_planner.arm_controller:standalone_test',
             'arm_controller_demo = kinova_pick_planner.arm_controller_DUMMY:demo_with_simulated_camera',
+            'failure_monitor = kinova_pick_planner.failure_monitor:main',
+            'dual_arm_coordinator = kinova_pick_planner.dual_arm_coordinator:main',
         ],
     },
 )

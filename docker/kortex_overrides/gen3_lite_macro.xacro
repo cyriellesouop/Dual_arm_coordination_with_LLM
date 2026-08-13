@@ -8,13 +8,25 @@
   pattern already used here for sim_isaac:
     1. `sim_mujoco:=false` added to the macro's param list.
     2. A new `xacro:if value="${sim_mujoco}"` block setting ros2_control_name to
-       "MujocoRosSystem" (the other branches here set it per-backend too, e.g.
-       "GenericSystem" for fake hardware — this is just a label passed to
-       <ros2_control name="...">, not the actual plugin class, which is chosen
-       separately in kortex.ros2_control.xacro).
+       "${prefix}MujocoRosSystem" (the other branches here set it per-backend
+       too, e.g. "GenericSystem" for fake hardware — this is just a label
+       passed to <ros2_control name="...">, not the actual plugin class, which
+       is chosen separately in kortex.ros2_control.xacro).
     3. `sim_mujoco` added to the exclusion list on the real-hardware `unless`
        block, and `sim_mujoco="${sim_mujoco}"` added to the xacro:kortex_ros2_control
        forwarding call.
+
+  Bug found and fixed during dual-arm work (see mujoco_motion_controller_tuning.md):
+  this branch originally set ros2_control_name to the bare literal
+  "MujocoRosSystem", NOT prefixed like the real-hardware branch a few lines down
+  (`${prefix}KortexMultiInterfaceHardware`). Harmless for a single arm, but with
+  two arms in one combined URDF both got the identical <ros2_control name=...>,
+  and mujoco_ros_control.cpp's resource_manager_->set_component_state(i.name, ...)
+  looks components up by that name — so the second arm's hardware component was
+  imported but silently never activated (symptom: its joint_trajectory_controller
+  failed to activate with "Not available" command interfaces, even though the
+  interfaces existed in the resource manager's inventory). Fixed by prefixing it,
+  matching the pattern already used one branch down.
 
   Everything else — all link/joint geometry, masses, inertias, mesh references,
   joint limits — is copied verbatim from the vendor original. Not modified, not
@@ -69,7 +81,7 @@
     <!-- NEW: mirrors the use_fake_hardware branch above -->
     <xacro:if value="${sim_mujoco}">
       <xacro:unless value="${moveit_active}">
-        <xacro:property name="ros2_control_name" value="MujocoRosSystem"/>
+        <xacro:property name="ros2_control_name" value="${prefix}MujocoRosSystem"/>
       </xacro:unless>
     </xacro:if>
     <xacro:unless value="${use_fake_hardware or sim_ignition or sim_gazebo or sim_mujoco}">

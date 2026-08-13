@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<!--
+  NEW file — not a vendor override, and does not replace any of the four
+  maintained overrides in docker/kortex_overrides/. Combines two independent
+  gen3_lite arm instantiations into one URDF for the MuJoCo dual-arm scene.
+
+  Why this exists: mujoco_ros_control hosts one controller_manager per
+  process, and MuJoCo itself requires globally-unique body/joint names within
+  one model — the domain-isolation trick used for the real dual-arm hardware
+  (ROS_DOMAIN_ID=0 / =1, two fully separate processes) doesn't apply here,
+  since both arms have to live in one shared physics world to actually
+  collide-check against each other. See mujoco_motion_controller_tuning.md
+  for the full reasoning.
+
+  Mechanism: reuses the load_robot macro (from kortex_robot.xacro, already
+  overridden to forward sim_mujoco="true" through to each arm's ros2_control
+  block) that kinova.urdf.xacro normally calls once — this file just calls it
+  TWICE, with different `prefix` and `origin` args, both attached to one
+  shared `world` link. Every joint/link/controller name ends up prefixed
+  (armA_joint_1, armB_joint_1, ...) via the `prefix` param that was already
+  threaded through the whole macro chain for the real dual-arm work, so no
+  new xacro plumbing was needed for name-collision avoidance.
+
+  Chosen at the "Sim topic layout" decision point: flat name-prefixed
+  controllers (armA_joint_trajectory_controller, armB_joint_trajectory_controller,
+  ...) sharing one controller_manager, NOT wrapped in ROS namespaces.
+
+  Existing single-arm files (gen3_lite.xml, scene_single_arm.xml,
+  plugin_config_single_arm.yaml) are intentionally left untouched — this is
+  new, parallel tooling for the dual-arm scene only, per explicit instruction.
+
+  Arm placement: armA_ at x=0, armB_ at x=1.10m (matching
+  kinova_pick_planner.py's OTHER_ARM_BASE_DISTANCE_X, already used for the
+  real dual-arm keepout-box math), armB_ rotated 180 degrees about Z so the
+  two arms face each other across that gap.
+-->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="dual_arm">
+
+  <xacro:include filename="$(find kortex_description)/robots/kortex_robot.xacro" />
+
+  <link name="world" />
+
+  <xacro:load_robot
+    parent="world"
+    prefix="armA_"
+    arm="gen3_lite"
+    gripper="gen3_lite_2f"
+    gripper_joint_name="right_finger_bottom_joint"
+    dof="6"
+    vision="false"
+    robot_ip="0.0.0.0"
+    username="admin"
+    password="admin"
+    port="10000"
+    port_realtime="10001"
+    session_inactivity_timeout_ms="60000"
+    connection_inactivity_timeout_ms="2000"
+    sim_mujoco="true"
+    moveit_active="false">
+    <origin xyz="0 0 0" rpy="0 0 0" />
+  </xacro:load_robot>
+
+  <xacro:load_robot
+    parent="world"
+    prefix="armB_"
+    arm="gen3_lite"
+    gripper="gen3_lite_2f"
+    gripper_joint_name="right_finger_bottom_joint"
+    dof="6"
+    vision="false"
+    robot_ip="0.0.0.0"
+    username="admin"
+    password="admin"
+    port="10000"
+    port_realtime="10001"
+    session_inactivity_timeout_ms="60000"
+    connection_inactivity_timeout_ms="2000"
+    sim_mujoco="true"
+    moveit_active="false">
+    <origin xyz="1.10 0 0" rpy="0 0 3.14159265359" />
+  </xacro:load_robot>
+
+</robot>

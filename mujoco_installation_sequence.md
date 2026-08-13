@@ -555,19 +555,23 @@ arms) is built.
   repositioning — edit its `pos`/`quat` to move the robot). Not yet done for the dual-arm case (see
   below).
 - Add a camera to the scene (for offscreen-rendering-based visual confirmation via `rqt_image_view`,
-  as an alternative to the native viewer) — `scene_single_arm.xml` already has one `overview` camera;
-  revisit once useful for perception, not needed for the motion-control work so far.
-- Commit to the **namespace-separated** (not domain-isolated) architecture for the eventual dual-arm
-  scene, since `rclcpp::init()` happens once per MuJoCo process — both robots in one shared scene
-  will necessarily share one `ROS_DOMAIN_ID`, differentiated by namespace instead. Both the pendulum
-  test and this single-arm test used one robot on its own dedicated domain (2, then 3); the real
-  dual-arm scene will need its own planning for which domain hosts both namespaced robots together.
-  **Next task to start.**
+  as an alternative to the native viewer) — both `scene_single_arm.xml` and `scene_dual_arm.xml`
+  already have one `overview` camera each; revisit once useful for perception.
+- ~~Commit to the namespace-separated architecture for the dual-arm scene~~ — **done**: flat
+  name-prefixed controllers (`armA_`/`armB_`) sharing one `controller_manager`, one `ROS_DOMAIN_ID`
+  (domain 4). Both arms load, render, and are independently commandable, correctly positioned 1.10m
+  apart facing each other (`OTHER_ARM_BASE_DISTANCE_X`, matching the real-hardware keepout convention).
+  Full narrative, including a real `ros2_control` hardware-name-collision bug found and fixed along
+  the way, in `mujoco_dual_arm_scene.md`.
 - ~~Add MuJoCo + `mujoco_ros_pkgs` **and** the four xacro overrides to `Dockerfile.server`~~ — **done
   and validated**: a full `docker build` from scratch exercising this exact sequence completed
   successfully (exit code 0).
-- Add `mujoco_scenes/*` (scene files + `plugin_config_single_arm.yaml`) to `Dockerfile.server` —
-  **deliberately deferred** until the dual-arm scene work is further along, so it's done once instead
-  of twice (explicit decision, not an oversight).
-- Move the generated artifacts (`/tmp/mujoco_gen3_lite/*`) somewhere durable/repo-tracked once the
-  launch flow is turned into an actual launch file, rather than hand-run commands against `/tmp`.
+- Add `mujoco_scenes/*` (single-arm **and** dual-arm scene/config files) to `Dockerfile.server` —
+  **still deliberately deferred**. Worth revisiting now that both scenes exist and are stable.
+- Move the generated artifacts (`/tmp/mujoco_gen3_lite/*`, `/tmp/mujoco_dual_arm/*`) somewhere
+  durable/repo-tracked once the launch flow is turned into an actual launch file, rather than
+  hand-run commands against `/tmp`.
+- Actual coordination/collision-avoidance behavior between the two arms — this milestone only proves
+  independent control of both arms in one shared scene; the ICRA deliverable of one arm
+  reacting to/avoiding the other (in physics, not just a static keepout box) is still ahead. **Next
+  task to start.**

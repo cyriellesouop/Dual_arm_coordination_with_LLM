@@ -1,0 +1,107 @@
+<mujoco model="dual arm scene">
+  <!--
+    Dual-arm scene: floor + lighting + table + two objects + an overview camera,
+    wrapped around dual_arm.xml (armA_ + armB_, facing each other 1.10m apart,
+    see kinova_dual_arm.urdf.xacro for the placement rationale).
+
+    NEW file, parallel to scene_single_arm.xml -- that file and gen3_lite.xml are
+    intentionally left untouched, per explicit instruction, rather than edited to
+    grow a second robot into them.
+
+    Table dimensions/position are copied verbatim from scene_single_arm.xml (which
+    itself matches TABLE_POSITION in kinova_pick_planner.py: x=0.325, y=0.00,
+    length=1.80, width=0.75, thickness=0.02, surface at z=-0.05) -- no change
+    needed: that table already spans x=[-0.575, 1.225], comfortably covering both
+    armA_base (x=0) and armB_base (x=1.10).
+
+    Cup and ball are the ICRA evaluation-harness task objects (see the "cup handoff
+    + ball" section in kinova_pick_planner.py and the evaluation-harness plan) --
+    dimensions/positions match OBJECT_TYPES["coffee_cup"]/["ping_pong_ball"] and
+    CUP_PICKUP_POSITION/BALL_PICKUP_POSITION exactly, NOT placeholders. The second
+    object was originally a straw; replaced with a standard ping-pong ball after
+    measuring this gripper's mechanical minimum closed gap (~30.4mm, from the MJCF
+    geometry directly) and finding an 8mm-diameter straw can never be pinch-gripped
+    at any close position -- not a tuning problem, a geometric one.
+
+    Include mechanics: MuJoCo's <include> at the top level of a <mujoco> document
+    merges same-named sections (<asset>, <worldbody>) from the included file
+    automatically -- dual_arm.xml itself needs no modification for this to work.
+
+    Must be loaded from the same directory as dual_arm.xml and the mesh STL files
+    (MuJoCo resolves mesh filenames by basename only, relative to the loaded XML's
+    directory -- see mujoco_installation_sequence.md gotcha 10).
+  -->
+  <include file="dual_arm.xml"/>
+
+  <compiler angle="radian"/>
+
+  <asset>
+    <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="512"/>
+    <texture name="grid" type="2d" builtin="checker" rgb1="0.1 0.2 0.3" rgb2="0.2 0.3 0.4"
+              width="512" height="512"/>
+    <material name="grid" texture="grid" texrepeat="4 4" reflectance="0.1"/>
+    <material name="table_mat" rgba="0.55 0.4 0.25 1"/>
+    <material name="cup_mat" rgba="0.13 0.59 0.95 1"/>
+    <material name="ball_mat" rgba="0.95 0.5 0.1 1"/>
+  </asset>
+
+  <worldbody>
+    <light pos="0.55 0 2.5" dir="0 0 -1" diffuse="0.7 0.7 0.7" specular="0.2 0.2 0.2"/>
+    <light pos="1.6 -1 2" dir="-0.3 0.3 -1" diffuse="0.4 0.4 0.4"/>
+    <light pos="-0.5 -1 2" dir="0.3 0.3 -1" diffuse="0.4 0.4 0.4"/>
+
+    <!-- Positioned well below the table (surface at z=-0.05) so the table reads as a
+         distinct raised surface instead of being hidden inside/behind the floor plane. -->
+    <geom name="floor" type="plane" pos="0 0 -0.5" size="3 3 0.05" material="grid"/>
+
+    <!-- Table: center z = TABLE_SURFACE_Z - thickness/2, matching add_table() in
+         kinova_pick_planner.py exactly (surface at z=-0.05, thickness=0.02). Unchanged
+         from scene_single_arm.xml -- already spans both arm bases, see header. -->
+    <body name="table" pos="0.325 0 -0.06">
+      <geom name="table_top" type="box" size="0.9 0.375 0.01" material="table_mat"/>
+    </body>
+
+    <!-- Cup: matches OBJECT_TYPES["mujoco_coffee_cup"] (13.5cm tall, 3.5cm
+         radius -- narrower than the real-hardware "coffee_cup"'s 4.5cm, for
+         gripper clearance margin, see that OBJECT_TYPES entry's comment) at
+         CUP_PICKUP_POSITION (Arm A's side, pulled out to a ~34cm mid-range
+         reach from armA_base -- see kinova_pick_planner.py's
+         NEAR_BASE_CUP_PICKUP_POSITION comment for why the original closer
+         position was moved). Body z = TABLE_SURFACE_Z (-0.05) + z_offset
+         (0.075) = 0.025; geom size = (radius, height/2) = (0.035, 0.0675). -->
+    <body name="cup" pos="0.30 0.15 0.025">
+      <freejoint/>
+      <!-- Softened solref/solimp on the CUP's own geom REVERTED back to
+           MuJoCo's engine defaults ("0.02 1" / "0.9 0.95 0.001 0.5 2") --
+           the cup's own contact params apply to EVERY contact it's in, not
+           just against the gripper, and a visual check this session found
+           the cup visibly sinking into the table surface after landing --
+           a classic over-compliant-contact symptom, most likely a real
+           contributor to the violent "explosion" launches observed all
+           session (deep sink-in against the table -> a large corrective
+           impulse once the solver catches up, not necessarily a
+           gripper-graze problem at all). Softening is kept on the GRIPPER
+           FINGER geoms instead (see dual_arm.xml) -- that side alone should
+           still give a gentler cup-gripper graze without also making
+           cup-table contact abnormally soft. condim=4 (was engine default 3)
+           is kept -- that's about enabling torsional/rolling friction, not
+           contact softness, and is still wanted so a grazed cup doesn't spin. -->
+      <geom name="cup_geom" type="cylinder" size="0.035 0.0675" material="cup_mat" mass="0.05"
+            condim="4" friction="1.0 0.01 0.001"/>
+    </body>
+
+    <!-- Ball: matches OBJECT_TYPES["ping_pong_ball"] (2cm radius, 40mm diameter,
+         standard ITTF ping-pong ball) at BALL_PICKUP_POSITION (Arm A's side, offset
+         in y from the cup). Body z = TABLE_SURFACE_Z (-0.05) + z_offset (0.025) =
+         -0.025; geom size = radius = 0.02. Mass ~2.7g, a real ping-pong ball's. -->
+    <body name="ball" pos="0.30 -0.15 -0.025">
+      <freejoint/>
+      <geom name="ball_geom" type="sphere" size="0.02" material="ball_mat" mass="0.0027"/>
+    </body>
+
+    <!-- Overview camera, auto-oriented at the table midpoint (no manual angle math needed).
+         Pulled back further than scene_single_arm.xml's equivalent camera since this scene
+         covers a wider (1.10m + both arms') workspace. -->
+    <camera name="overview" pos="2.4 -2.4 1.8" mode="targetbody" target="table"/>
+  </worldbody>
+</mujoco>

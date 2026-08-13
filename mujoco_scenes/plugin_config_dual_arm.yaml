@@ -1,0 +1,122 @@
+# mujoco_ros_control plugin + controller_manager config for the dual-arm MuJoCo
+# scene (mujoco_scenes/scene_dual_arm.xml). NEW file, parallel to
+# plugin_config_single_arm.yaml (left untouched, per explicit instruction).
+#
+# Architecture decision (see mujoco_motion_controller_tuning.md /
+# conversation): both arms share ONE controller_manager (mujoco_ros_control hosts
+# one per process, and MuJoCo requires globally-unique names within one model --
+# the domain-isolated real-hardware architecture doesn't carry over to one shared
+# physics scene). Each arm gets its OWN independent joint_state_broadcaster,
+# joint_trajectory_controller, and gripper controller -- flat name-prefixed
+# (armA_/armB_), NOT wrapped in ROS namespaces (explicit decision: simpler, no
+# unverified mujoco_ros_control namespace behavior to debug; avoids a single
+# shared trajectory controller that would force every goal to specify both arms'
+# targets together, which would be awkward for two independently-acting agents).
+#
+# joint lists / interfaces / gains follow the same vendor-derived pattern as
+# plugin_config_single_arm.yaml, just duplicated per prefix.
+/mujoco_server:
+  ros__parameters:
+    MujocoPlugins.names:
+      - mujoco_ros_control
+    MujocoPlugins.mujoco_ros_control.type: mujoco_ros_control/MujocoRosControlPlugin
+
+/mujoco_server/mujoco_ros_control:
+  ros__parameters:
+    namespace: ""
+    robot_description_node: robot_state_publisher
+    robot_description: robot_description
+
+/controller_manager:
+  ros__parameters:
+    # 500 Hz, matching MuJoCo's default 0.002s physics timestep -- same reasoning
+    # as plugin_config_single_arm.yaml (see its comment for the full derivation).
+    update_rate: 500
+    armA_joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    armA_joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    armA_gen3_lite_2f_gripper_controller:
+      type: position_controllers/GripperActionController
+    armB_joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    armB_joint_trajectory_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+    armB_gen3_lite_2f_gripper_controller:
+      type: position_controllers/GripperActionController
+
+armA_joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - armA_joint_1
+      - armA_joint_2
+      - armA_joint_3
+      - armA_joint_4
+      - armA_joint_5
+      - armA_joint_6
+      - armA_right_finger_bottom_joint
+
+armA_joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - armA_joint_1
+      - armA_joint_2
+      - armA_joint_3
+      - armA_joint_4
+      - armA_joint_5
+      - armA_joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+armA_gen3_lite_2f_gripper_controller:
+  ros__parameters:
+    default: true
+    joint: armA_right_finger_bottom_joint
+    allow_stalling: true
+
+armB_joint_state_broadcaster:
+  ros__parameters:
+    joints:
+      - armB_joint_1
+      - armB_joint_2
+      - armB_joint_3
+      - armB_joint_4
+      - armB_joint_5
+      - armB_joint_6
+      - armB_right_finger_bottom_joint
+
+armB_joint_trajectory_controller:
+  ros__parameters:
+    joints:
+      - armB_joint_1
+      - armB_joint_2
+      - armB_joint_3
+      - armB_joint_4
+      - armB_joint_5
+      - armB_joint_6
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+      - velocity
+    state_publish_rate: 100.0
+    action_monitor_rate: 20.0
+    allow_partial_joints_goal: false
+    constraints:
+      stopped_velocity_tolerance: 0.0
+      goal_time: 0.0
+
+armB_gen3_lite_2f_gripper_controller:
+  ros__parameters:
+    default: true
+    joint: armB_right_finger_bottom_joint
+    allow_stalling: true

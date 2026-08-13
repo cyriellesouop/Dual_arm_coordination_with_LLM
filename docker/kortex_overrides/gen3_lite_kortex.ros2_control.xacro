@@ -227,7 +227,7 @@
       <xacro:unless value="${use_fake_hardware or sim_isaac or sim_ignition}">
         <xacro:unless value="${moveit_active}">
           <joint name="${prefix}right_finger_bottom_joint">
-            <param name="kp">10.0</param>
+            <param name="kp">50.0</param>
             <param name="effort_limit">50.0</param>
             <command_interface name="position"/>
             <state_interface name="position"/>
@@ -237,7 +237,7 @@
       </xacro:unless>
       <xacro:if value="${moveit_active}">
         <joint name="${prefix}right_finger_bottom_joint">
-          <param name="kp">10.0</param>
+          <param name="kp">50.0</param>
           <param name="effort_limit">50.0</param>
           <command_interface name="position"/>
           <state_interface name="position"/>

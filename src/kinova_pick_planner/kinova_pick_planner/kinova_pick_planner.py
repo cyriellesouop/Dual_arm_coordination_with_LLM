@@ -142,6 +142,66 @@ OTHER_ARM_KEEPOUT = {
 
 
 # =============================================================================
+# DUAL-ARM CUP HANDOFF + BALL TASK (ICRA evaluation harness — MuJoCo only,
+# see mujoco_dual_arm_scene.md / the evaluation-harness plan). Arm A picks the
+# cup from its own side, carries it to HANDOFF_POSE (roughly the table
+# midpoint, within both arms' reach), Arm B takes over and carries it to
+# CUP_FINAL_PLACE_POSITION on its own side, then Arm A picks a ping-pong ball
+# and places it within BALL_PLACE_TOLERANCE_M of the cup's final resting pose
+# (originally a straw for this second object -- see the ping_pong_ball
+# ObjectType entry below for why that changed).
+# Positions below assume the dual-arm MuJoCo layout built this session:
+# armA_base at x=0, armB_base at x=OTHER_ARM_BASE_DISTANCE_X (1.10), table
+# spanning x=[-0.575, 1.225] (TABLE_POSITION below) — NOT valid for the
+# single, domain-isolated real-arm setup, where each arm's planning frame
+# has no notion of the other arm's position at all.
+# =============================================================================
+
+# NEAR_BASE_* variants kept here (not deleted) — the original pickup/place
+# positions, ~21-25cm from the owning arm's base. Diagnosed during live
+# testing as too close: a near-base reach puts the arm in a folded joint
+# configuration prone to swinging sideways under joint-space interpolation
+# (measured ~7cm of object displacement mid-descent). Not currently used by
+# the task, but earmarked as a deliberately-harder configuration variant for
+# the paper (comparing task success across reach distance / joint-config
+# difficulty), so keep these exact numbers rather than losing them.
+NEAR_BASE_CUP_PICKUP_POSITION = {"x": 0.15, "y": 0.15, "z_above_table": 0.0}
+NEAR_BASE_BALL_PICKUP_POSITION = {"x": 0.15, "y": -0.15, "z_above_table": 0.0}
+NEAR_BASE_CUP_FINAL_PLACE_POSITION = {"x": 0.90, "y": 0.15, "z_above_table": 0.0}
+
+# Current default: pulled out to a comfortable ~34cm mid-range reach from each
+# arm's own base (symmetric on both sides) instead of the cramped near-base
+# positions above.
+CUP_PICKUP_POSITION = {"x": 0.30, "y": 0.15, "z_above_table": 0.0}   # Arm A's side
+BALL_PICKUP_POSITION = {"x": 0.30, "y": -0.15, "z_above_table": 0.0}  # Arm A's side, offset in y from the cup so the two pickups don't overlap
+
+# Roughly the midpoint between armA_base (x=0) and armB_base (x=1.10) —
+# reachable by both arms without either needing to lean into the other's
+# keepout envelope (OTHER_ARM_KEEPOUT above). z_above_table=0.0 (resting ON
+# the table): the dual-arm coordinator uses a place-then-pick handoff, not a
+# true simultaneous mid-air handoff (both grippers converging on the cup at
+# once caused a physically unstable contact blow-up — see
+# mujoco_dual_arm_scene.md/dual_arm_coordinator.py) — this used to be 0.15
+# (a mid-air hold height) for that abandoned design; left at 0.0 now to match
+# CUP_FINAL_PLACE_POSITION's convention.
+HANDOFF_POSE = {"x": 0.55, "y": 0.0, "z_above_table": 0.0}
+
+CUP_FINAL_PLACE_POSITION = {"x": 0.80, "y": 0.15, "z_above_table": 0.0}  # Arm B's side, ~34cm from armB_base
+
+# "Success" for the ball sub-task is the ball resting within this radius of
+# the cup's final position — not literal insertion into the cup opening,
+# which is a much harder precision problem and out of scope (see the
+# evaluation-harness plan's Task Design section). Originally a straw for this
+# spot; swapped for a ping-pong ball after finding the gripper's mechanical
+# minimum closed gap (~30.4mm, measured directly from the MJCF geometry) makes
+# an 8mm-diameter straw physically impossible to pinch-grip at any close
+# position -- not a tuning problem, a geometric one. A standard ping-pong ball
+# (40mm diameter) is well inside the gripper's graspable range and reuses the
+# existing sphere/top-grasp pattern already used for foam_ball.
+BALL_PLACE_TOLERANCE_M = 0.05
+
+
+# =============================================================================
 # OBJECT TYPES
 # =============================================================================
 
@@ -184,6 +244,39 @@ OBJECT_TYPES = {
         name="small_box", shape="box",
         dimensions=(0.06, 0.06, 0.06),
         height=0.06, z_offset=0.035,
+    ),
+    # mujoco_coffee_cup: 3.5cm radius / 70mm diameter -- narrower than the
+    # real-hardware "coffee_cup"'s 4.5cm/90mm. At 90mm this gripper's
+    # finger_prox_link only has ~7.6mm of clearance even fully open (for the
+    # arm pose a top-down grasp of this object requires), which produced
+    # inconsistent outcomes (clean sometimes, slipped free on lift other
+    # times, occasionally a violent launch) even after softening contact
+    # solver params. Separately, a real joint-runaway bug (right_finger_
+    # bottom_joint's actuator torque was uncapped enough to tunnel through
+    # its own 0-0.85 rad range limit under load, measured at -328 rad after
+    # one stuck gripper action) was muddying the 90mm-vs-70mm comparison --
+    # now fixed (actuatorfrcrange capped, solreflimit/solimplimit stiffened
+    # on the bottom joints, see dual_arm.xml). At 3.5cm radius, clearance is
+    # ~18mm (53mm prox-link-to-object-center distance, roughly fixed by the
+    # arm's required pose regardless of object size, minus this radius) --
+    # more than double the 90mm case's margin.
+    "mujoco_coffee_cup": ObjectType(
+        name="mujoco_coffee_cup", shape="cylinder",
+        dimensions=(0.135, 0.035), height=0.135, z_offset=0.075,
+    ),
+    # Second MuJoCo-harness pick-place object. Originally a thin "straw"
+    # (4mm radius cylinder) -- replaced after measuring the gripper's
+    # mechanical minimum closed gap directly from the MJCF geometry
+    # (~30.4mm, fingertip-to-fingertip at max closure) and finding an 8mm-
+    # diameter object can never be pinch-gripped at any close position, not a
+    # tuning problem but a geometric one. Standard ping-pong ball (40mm
+    # diameter, ITTF spec) is comfortably inside the graspable range and
+    # reuses the same sphere/top-grasp pattern as foam_ball, just correctly
+    # sized rather than reusing foam_ball's own (slightly different) numbers.
+    "ping_pong_ball": ObjectType(
+        name="ping_pong_ball", shape="sphere",
+        dimensions=(0.02,),   # 2cm radius (4cm / 40mm diameter, standard ping-pong ball)
+        height=0.04, z_offset=0.025,
     ),
 }
 
@@ -255,6 +348,84 @@ GRASP_STRATEGIES = {
         approach_offset=0.12,
         qx=1.0, qy=0.0, qz=0.0, qw=0.0,
     ),
+    # mujoco_coffee_cup: top-approach variant, used ONLY by the MuJoCo-direct
+    # path (mujoco_arm_executor.py) -- NOT a replacement for the side-grasp
+    # "coffee_cup" entry above, which stays untouched (side grasp is the
+    # physically sensible real-world choice for picking up an actual cup, and
+    # that quaternion is still the real-hardware-tuned one via MoveIt2). This
+    # is a MuJoCo-specific workaround: extensive debugging found the 6D pose
+    # IK needed to hit the side-grasp orientation reliably doesn't converge
+    # (see mujoco_ik.py's docstring -- settles at ~pi orientation error, root
+    # cause not isolated), and position-only IK combined with a SIDE approach
+    # was found live to cause the gripper to broadside the object (uncontrolled
+    # orientation + a horizontal approach = collision, not a clean slide-in).
+    # A top approach is far more tolerant of imperfect orientation (gripper
+    # descends roughly along Z regardless of exact wrist roll), so it works
+    # with position-only IK where the side approach didn't.
+    #
+    # gripper_close_pos=0.27, NOT the 0.55 an earlier version of this entry
+    # used -- measured directly from the MJCF geometry (see
+    # dual_arm_coordinator.py / conversation) that this gripper's fingertip
+    # gap at close_pos=0.55 is only 59.9mm, LESS than the cup's own 90mm
+    # diameter -- i.e. that value commanded the gripper to close 30mm THROUGH
+    # the cup, which a plain position controller with no effort limit resolves
+    # by generating an ever-increasing squeeze force against the object once
+    # blocked by contact, a real and independent contributor to the violent
+    # launches seen this session (the same failure pattern documented in
+    # github.com/moveit/mujoco_ros2_control/issues/40: "pure position control
+    # without effort limits ... will squeeze the boxes until they jump around/
+    # away"). 0.27 gives an ~87.5mm gap -- a firm ~2.5mm compliant squeeze
+    # against the actual 90mm object, not an impossible over-closure.
+    # qx=0.0, qy=1.0, qz=0.0, qw=0.0, NOT (1,0,0,0) -- both represent the same
+    # physical "point straight down" family (differ only by a 180-degree roll
+    # about the vertical approach axis, which a round cup doesn't care about),
+    # but (1,0,0,0) turned out to be a badly-conditioned choice for this arm's
+    # kinematics: the 6D solve stalled at an orientation residual near pi
+    # (traced to a real bug, since fixed -- see mujoco_ik.py's solve_position_ik,
+    # mju_subQuat's local-frame vector was being combined with mj_jac's
+    # world-frame Jacobian), and even after that fix, converged only to ~0.1-0.2
+    # rad residual with armA_joint_5 pinned at its +-2.53 rad limit. A roll
+    # sweep (0-330 degrees in 30-degree steps) against the corrected solver
+    # found roll=150-270 degrees all converge cleanly with joint_5 well clear
+    # of its limit; 180 degrees (this value) sits in the middle of that safe
+    # range. Verified for both approach_pose and grasp_pose at
+    # CUP_PICKUP_POSITION with the corrected solver before being adopted here.
+    # gripper_close_pos=0.6 (was 0.5) -- with the incremental-close +
+    # per-step settle fix (mujoco_arm_executor.py's pick()) and the
+    # cup-vs-table contact softness bug fixed (scene_dual_arm.xml), the
+    # descend+close sequence now disturbs the cup by only ~3mm total, down
+    # from multi-cm/violent-launch territory -- there's real headroom to
+    # squeeze harder without risk. Measured (with the finger equality
+    # coupling correctly applied): close_pos=0.6 gives ~54.9mm gap against
+    # this 70mm cup, ~7.5mm of compliant squeeze each side (was ~2.6mm at
+    # 0.5) -- picked because 0.5's grip wasn't generating enough normal
+    # force/friction to hold the cup's weight through the lift (arm lifted
+    # clean, cup stayed on the table, Z unchanged).
+    # grab_z_ratio=0.45 (was 0.7, near the rim) -- gripping close to the rim
+    # leaves nothing below the pinch to stop the fingers sliding UP and off
+    # the cup during any vertical lift force; the cup was never actually
+    # secured through many other fixes (contact softness, incremental
+    # close, velocity settling), so trying a lower grip point with cylinder
+    # wall both above and below the pinch for a more mechanically stable
+    # vertical hold.
+    "mujoco_coffee_cup": GraspStrategy(
+        approach="top", grab_z_ratio=0.45, grab_z_offset=0.01,
+        gripper_close_pos=0.6, gripper_effort=25.0,
+        approach_offset=0.12,
+        qx=0.0, qy=1.0, qz=0.0, qw=0.0,
+    ),
+    # ping_pong_ball: same top-grasp pattern as foam_ball/apple/orange, but
+    # with gripper_close_pos computed the same measured way as
+    # mujoco_coffee_cup above rather than copied from a similarly-sized
+    # entry -- close_pos=0.77 gives an ~38mm fingertip gap against the ball's
+    # actual 40mm diameter (a firm ~2mm squeeze), comfortably inside this
+    # gripper's ~30.4mm mechanical minimum closed gap.
+    "ping_pong_ball": GraspStrategy(
+        approach="top", grab_z_ratio=0.8, grab_z_offset=0.01,
+        gripper_close_pos=0.77, gripper_effort=15.0,
+        approach_offset=0.12,
+        qx=1.0, qy=0.0, qz=0.0, qw=0.0,
+    ),
 }
 
 # =============================================================================
@@ -303,6 +474,19 @@ PLACE_STRATEGIES = {
         place_z_ratio=0.5,
         place_z_offset=0.02,
         release_retreat=0.12,
+    ),
+    # mujoco_coffee_cup / ping_pong_ball: place_z_ratio matches these types'
+    # GRASP_STRATEGIES grab_z_ratio (0.7 / 0.8) rather than coffee_cup's 0.1 --
+    # for a TOP grasp the gripper holds near the object's upper portion the
+    # whole time it's carried, so releasing at that same relative height means
+    # ~zero drop distance when set down (natural, matches how it's actually
+    # being held), instead of assuming a near-the-base release point that only
+    # made sense for the side-grasp's different hold geometry.
+    "mujoco_coffee_cup": PlaceStrategy(
+        place_z_ratio=0.7, place_z_offset=0.01, release_retreat=0.12,
+    ),
+    "ping_pong_ball": PlaceStrategy(
+        place_z_ratio=0.8, place_z_offset=0.01, release_retreat=0.10,
     ),
 }
 
